@@ -3,6 +3,11 @@
 import time
 from collections import defaultdict
 import logging
+import json # dodano
+from typing import Dict, Any # dodano
+from digi.xbee.devices import ZigBeeDevice # dodano
+from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress # dodano
+from digi.xbee.exception import TransmitException # dodano
 
 import networkx as nx
 import numpy as np
@@ -13,6 +18,9 @@ from prettytable import PrettyTable
 from xbee_dec_gnn.decentralized_gnns.dec_gnn import DecentralizedGNN
 from xbee_dec_gnn.utils.led_matrix import LEDMatrix
 
+def load_config(path: str) -> Dict[str, Any]:    # dodano
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 class ObjectWithLogger:
     def __init__(self):
@@ -61,12 +69,16 @@ class Node(ObjectWithLogger):
         self.round_counter = 0
         self.local_subgraph = nx.Graph()
         self.active_neighbors = []
+
+        cfg = load_config('config.json')
+        self.id_to_addr = cfg["id_to_addr"]
+
         self.stats = {"inference_time": [], "message_passing_time": [], "pooling_time": [], "round_time": []}
 
         # TODO: Load parameters
         default_model_path = "/root/ros2_ws/src/ros2_dec_gnn/ros2_dec_gnn/config/models/dist-32.pth"
-        self.num_nodes = ...
-        self.gnn_model_path = ...
+        self.num_nodes = 5
+        self.gnn_model_path = default_model_path
 
         # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
         dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
@@ -74,6 +86,14 @@ class Node(ObjectWithLogger):
 
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
+
+        self.device = ZigBeeDevice('/dev/ttyUSB0', 9600)  # CHANGE SO ITS NOT HARDCODED
+        self.device.open()
+        self.device.add_data_received_callback(self._on_rx)
+
+        self.get_logger().info(f"[{self.node_id}] Port: {self.port} @ {self.baud}")
+        self.get_logger().info(f"[{self.node_id}] Adresa: {self.device.get_64bit_addr()}")
+
 
         print("Node initialized.")
 
@@ -88,6 +108,25 @@ class Node(ObjectWithLogger):
     #     self.get_logger().debug(f"Received graph {msg.data} with algebraic connectivity λ₂: {lambda2:.4f}")
 
     #     self.local_subgraph: nx.Graph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
+
+    def _on_rx(self, xbee_message):
+        try:
+            msg = json.loads(xbee_message.data.decode("utf-8"))
+        except Exception:
+            print("Failed")
+            return
+
+        if not isinstance(msg, dict):
+            return
+
+        if msg.get("t") == "init":
+            pass
+        if msg.get("t") == "mp":
+            self.receive_message_passing(msg)
+        if msg.get("t") == "pooling":
+            self.receive_pooling(msg)
+
+
 
     def get_neighbors(self):
         self.active_neighbors = []
@@ -111,8 +150,10 @@ class Node(ObjectWithLogger):
     def get_initial_features(self):
         # TODO: Adapt for Xbee
 
+        
+
         # Compute the initial feature vector for this node.
-        self.value = torch.Tensor(...)
+        self.value = torch.Tensor(torch.rand(30)) # PROMJENITI S OBZIROM NA ŠTO ŽELIMO
         self.get_logger().debug(f"Initial feature vector for node: {self.value}")
         self.get_logger().debug(f"Local subgraph edges: {list(self.local_subgraph.edges())}")
         return self.value
@@ -192,13 +233,36 @@ class Node(ObjectWithLogger):
         #     self.mp_pubs[neighbor].publish(msg)
         #     self.get_logger().debug(f"Sent message to {neighbor} at layer {layer}")
         # TODO: Adapt for Xbee
-        pass
+
+        msg = {
+            "t": "mp",
+            "sender" : self.node_name,
+            "i" : layer,
+            "data" : value.flatten().tolist(),
+            "shape" : list(value.shape)
+        }
+
+        data = json.dumps(msg).encode("utf-8")
+        for neighbor in self.active_neighbors:
+            addr = XBee64BitAddress.from_hex_string(self.id_to_addr[neighbor])
+            try:
+                # self.device.send_data_64(addr, data)
+                self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                return True
+            except TransmitException as e:
+                status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
+                self.get_logger().debug(f"[{self.node_id}] TX FAIL to={neighbor} k={layer} status={status}")
+                return False
 
     def receive_message_passing(self, msg):
         # Reconstruct tensor from flattened data and shape
         # tensor_data = torch.tensor(msg.data).reshape(tuple(msg.shape))
         # self.received_mp[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
+
+        tensor_data = torch.tensor(msg.data).reshape(tuple(msg.shape))
+        self.received_mp[msg.iteration][msg.sender] = tensor_data
+
         pass
 
     def send_pooling(self, iteration: int, value: dict[str, torch.Tensor] | torch.Tensor):
@@ -219,7 +283,35 @@ class Node(ObjectWithLogger):
         #     self.pooling_pubs[neighbor].publish(msg)
         #     self.get_logger().debug(f"Sent pooling message to {neighbor} at iteration {iteration}")
         # TODO: Adapt for Xbee
-        pass
+
+
+        msg = {
+            "t": "pooling",
+            "sender" : self.node_name,
+            "i" : iteration
+        }
+
+        if isinstance(value, dict):  # This enables pooling by flooding
+            msg["sources"] = list(value.keys)
+
+            data = torch.stack(list(value.values()), dim=0)
+            msg["data"] = data.flatten().tolist()  # Flatten tensor to 1D list
+            msg["shape"] = list(data.shape)  # Store original shape
+        else:
+            msg["data"] = value.flatten().tolist()  # Flatten tensor to 1D list
+            msg["shape"] = list(value.shape)  # Store original shape
+
+        data = json.dumps(msg).encode("utf-8")
+        for neighbor in self.active_neighbors:
+            addr = XBee64BitAddress.from_hex_string(self.id_to_addr[neighbor])
+            try:
+                # self.device.send_data_64(addr, data)
+                self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                return True
+            except TransmitException as e:
+                status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
+                self.get_logger().debug(f"[{self.node_id}] TX FAIL to={neighbor} k={layer} status={status}")
+                return False
 
     def receive_pooling(self, msg):
         # self.get_logger().debug(f"Received pooling message from {msg.sender} at iteration {msg.iteration}")
@@ -232,7 +324,16 @@ class Node(ObjectWithLogger):
         #     tensor_data = torch.tensor(msg.data).reshape(tuple(msg.shape))
         # self.received_pooling[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
-        pass
+
+        self.get_logger().debug(f"Received pooling message from {msg["sender"]} at iteration {msg["i"]}")
+        if len(msg.sources) > 0:
+            # Reconstruct dict of tensors from flattened data and shape
+            data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
+            tensor_data = {source: data[i] for i, source in enumerate(msg["sources"])}
+        else:
+            # Reconstruct tensor from flattened data and shape
+            tensor_data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
+        self.received_pooling[msg["i"]][msg["sender"]] = tensor_data
 
     def compute_gnn(self):
         ready = self.get_neighbors()

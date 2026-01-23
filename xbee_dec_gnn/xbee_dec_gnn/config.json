@@ -1,0 +1,18 @@
+{
+  "id_to_addr": {
+    "A": "0013A20041F5B73D",
+    "B": "0013A20041F5B749",
+    "C": "0013A20041F5B771",
+    "D": "0013A20041F5B737",
+    "E": "0013A20041F5B96D"
+
+  },
+  "nodes": {
+    "A": {"neighbours": ["D","B", "E"], "value":1},
+    "B": {"neighbours": ["C", "A"], "value":2},
+    "C": {"neighbours": ["D", "B"], "value":3},
+    "D": {"neighbours": ["E", "C", "A"], "value":4},
+    "E": {"neighbours": ["A", "D"], "value":5}
+  }
+}
+

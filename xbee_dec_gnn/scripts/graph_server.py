@@ -9,18 +9,18 @@ import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import rclpy
-import rclpy.qos
+# import rclpy
+# import rclpy.qos
 import torch_geometric.utils as tg_utils
-from rclpy.node import Node
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
+# from rclpy.node import Node
+# from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+# from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.widgets import Button
 from torch_geometric.data import InMemoryDataset
-from sensor_msgs.msg import Image
+# from sensor_msgs.msg import Image
 
-from ros2_dec_gnn_msgs.msg import GraphData
+# from ros2_dec_gnn_msgs.msg import GraphData
 from my_graphs_dataset import GraphDataset
 
 msg_qos = rclpy.qos.QoSProfile(
