@@ -23,9 +23,8 @@ from torch_geometric.data import InMemoryDataset
 # from ros2_dec_gnn_msgs.msg import GraphData
 from my_graphs_dataset import GraphDataset
 
-import json 
-import time
-import threading
+import json, time, threading
+from pathlib import Path
 from typing import Dict, Any 
 from digi.xbee.devices import ZigBeeDevice 
 from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress
@@ -33,7 +32,7 @@ from digi.xbee.exception import TransmitException
 
 BCAST_64 = XBee64BitAddress.from_hex_string("000000000000FFFF")
 BCAST_16 = XBee16BitAddress.from_hex_string("FFFE")
-ROOT = "~/other_ws/xbee_dec_gnn/"
+ROOT = Path("~/other_ws/xbee_dec_gnn").expanduser()
 
 # msg_qos = rclpy.qos.QoSProfile(
 #     history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
