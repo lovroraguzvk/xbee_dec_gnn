@@ -193,9 +193,12 @@ class GraphGenerator():
         time.sleep(0.1)
 
     def receive_message(self, xbee_message):
+        print(f'received xbee {xbee_message}')
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
+            print(f'received {msg}')
         except Exception:
+            print(f'failed json')
             return
         
         if msg.get("type") == "INIT":
