@@ -385,7 +385,7 @@ class Node(ObjectWithLogger):
         # self.received_pooling[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
 
-        self.get_logger().debug(f"Received pooling message from {msg["sender"]} at iteration {msg["i"]}")
+        self.get_logger().debug(f"Received pooling message from {msg['sender']} at iteration {msg['i']}")
         if len(msg.sources) > 0:
             # Reconstruct dict of tensors from flattened data and shape
             data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
