@@ -64,24 +64,24 @@ windows:
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
           python3 node.py
-        - |
-          <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@rpi2.local 'docker start -i xbee_gnn_cont'
-          <%- end %>
-          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
-          python3 node.py
-        - |
-          <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@rpi3.local 'docker start -i xbee_gnn_cont'
-          <%- end %>
-          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
-          python3 node.py
-        - |
-          <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@rpi4.local 'docker start -i xbee_gnn_cont'
-          <%- end %>
-          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
-          python3 node.py
+        # - |
+        #   <%- if args[0] == "remote" %>
+        #   ssh -o StrictHostKeyChecking=no -t pi@rpi2.local 'docker start -i xbee_gnn_cont'
+        #   <%- end %>
+        #   cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
+        #   python3 node.py
+        # - |
+        #   <%- if args[0] == "remote" %>
+        #   ssh -o StrictHostKeyChecking=no -t pi@rpi3.local 'docker start -i xbee_gnn_cont'
+        #   <%- end %>
+        #   cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
+        #   python3 node.py
+        # - |
+        #   <%- if args[0] == "remote" %>
+        #   ssh -o StrictHostKeyChecking=no -t pi@rpi4.local 'docker start -i xbee_gnn_cont'
+        #   <%- end %>
+        #   cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
+        #   python3 node.py
   - central:
       panes:
         - |-
