@@ -177,7 +177,7 @@ class GraphGenerator():
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                print(f"[CENTRAL] {msg.get("type")} -> {node_id}, MAC -> {addr} (attempt {attempt})")
+                print(f"[CENTRAL] {msg.get('type')} -> {node_id}, MAC -> {addr} (attempt {attempt})")
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
