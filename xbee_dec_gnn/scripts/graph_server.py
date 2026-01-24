@@ -93,6 +93,9 @@ class GraphGenerator():
         cfg = load_config(config)
         self.hostnames_to_id = cfg["hostnames_to_id"]
 
+        self.port = port
+        self.baud = baud_rate
+
         self.id_to_addr = dict.fromkeys(list(self.hostnames_to_id.values()))
         self._received_responses = set()
         self.final_init_event = threading.Event()
