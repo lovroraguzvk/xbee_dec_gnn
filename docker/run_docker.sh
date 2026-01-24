@@ -32,6 +32,7 @@ else
   docker run \
     -it \
     --network host \
+    --device /dev/serial/by-id/usb-FTDI_FT231X_USB_UART_D30AY52N-if00-port0:/dev/ttyUSB0 \
     --ipc host \
     --volume ~/.ssh/ssh_auth_sock:/ssh-agent \
     --volume /var/run/dbus:/var/run/dbus \
