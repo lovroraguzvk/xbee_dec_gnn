@@ -222,7 +222,7 @@ class GraphGenerator():
 
             print(f'[CENTRAL] Received ACK_ID from {msg.get("id")}')
 
-            if len(self.final_acks) >= self.num_nodes:
+            if len(self._received_responses) >= self.num_nodes:
                 self.final_ack_event.set()
             
 
@@ -230,7 +230,7 @@ class GraphGenerator():
 
         # TODO: finish this and make it so each only gets its own neighbourhood
 
-        for id, addr in self.id_to_addr:
+        for id, addr in self.id_to_addr.items():
             msg = {
                 "type" : "GRAPH",
                 "graph6_str" :  GraphDataset.to_graph6(self.G),
