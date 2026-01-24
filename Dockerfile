@@ -25,7 +25,12 @@ RUN apt-get update && \
         libnss-mdns \
         libboost-python-dev \
         python3-pip \
-        python3-tk
+        python3-tk \
+        libnss-mdns \
+        avahi-utils \
+        dbus \
+    && sed -i 's/^hosts:.*/hosts:          files dns mdns4_minimal/' /etc/nsswitch.conf \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
 
