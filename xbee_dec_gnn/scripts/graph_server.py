@@ -117,9 +117,9 @@ class GraphGenerator():
         self.device.open()
         self.device.add_data_received_callback(self.receive_message)
 
-        print(f"[{self.node_id}] Port: {self.port} @ {self.baud}")
-        print(f"[{self.node_id}] Adresa: {self.device.get_64bit_addr()}")
-        print(f"[{self.node_id}] Waiting for INIT from others (broadcasting MAC)")
+        print(f"[CENTRAL] Port: {self.port} @ {self.baud}")
+        print(f"[CENTRAL] Adresa: {self.device.get_64bit_addr()}")
+        print(f"[CENTRAL] Waiting for INIT from others (broadcasting MAC)")
 
         my_addr = str(self.device.get_64bit_addr())
 
