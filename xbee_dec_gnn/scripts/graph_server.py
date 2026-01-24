@@ -157,7 +157,7 @@ class GraphGenerator():
 
         print("[CENTRAL] All INITs received, waiting for ACK_IDs")
 
-        for node_id, addr in self.id_to_addr:
+        for node_id, addr in self.id_to_addr.items():
             msg = {
                     "type": "ACK_INIT",
                     "id" : node_id,
