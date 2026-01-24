@@ -137,7 +137,7 @@ class Node(ObjectWithLogger):
 
             self.send_message_xbee(new_msg, self.central_addr, "CENTRAL")
 
-            self.node_name = self.node_prefix + self.node_id
+            self.node_name = self.node_prefix + str(self.node_id)
 
             self.init_id_lock.set()
 
