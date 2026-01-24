@@ -1,9 +1,9 @@
 {
   "hostnames_to_id" : {
-    "rpi0" : "A",
-    "rpi1" : "B",
-    "rpi2" : "C",
-    "rpi3" : "D",
-    "rpi4" : "E"
+    "rpi0" : 1,
+    "rpi1" : 2,
+    "rpi2" : 3,
+    "rpi3" : 4,
+    "rpi4" : 5
   }
 }
