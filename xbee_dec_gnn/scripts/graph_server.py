@@ -113,8 +113,13 @@ class GraphGenerator():
         if self.gui_mode:
             self.process_next_graph()
         else:
-            # self.create_timer(0.5, self.graph_timer_cb, callback_group=self.blocked_group)
-            print("Non-gui not implemented yet") # TODO: implement
+            self._timer_thread = threading.Thread(
+                target=self._timer_loop,
+                daemon=True
+            )
+            self._timer_thread.start()
+
+            # print("Non-gui not implemented yet") # TODO: implement
 
     def start(self):
         self.device.open()
@@ -364,6 +369,11 @@ class GraphGenerator():
                 if non_edges:  # Check if there are any non-edges to add
                     self.G.add_edge(*random.choice(non_edges))
                 graph_ok = True
+
+    def _timer_loop(self):
+        while True:
+            time.sleep(0.5)
+            self.graph_timer_cb()
 
     def load_next_graph(self):
         """Load the next graph from the dataset."""
