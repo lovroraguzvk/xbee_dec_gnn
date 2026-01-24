@@ -197,12 +197,9 @@ class GraphGenerator():
         time.sleep(0.1)
 
     def receive_message(self, xbee_message):
-        print(f'received xbee {xbee_message}')
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
-            print(f'received {msg}')
         except Exception:
-            print(f'failed json')
             return
         
         if msg.get("type") == "INIT":
@@ -212,14 +209,16 @@ class GraphGenerator():
 
             self.id_to_addr[node_id] = sender_64
 
-            print(f'[CENTRAL] Received INIT from {node_id} ({sender_64}), sending ACK_INIT')
+            print(f'[CENTRAL] Received INIT from {node_id} ({sender_64})')
+
+            self._received_responses.add(hostname)
 
             if len(self._received_responses) >= self.num_nodes:
                 self._received_responses = set()
                 self.final_init_event.set()
 
         if msg.get("type") == "ACK_ID":
-            self.final_acks.add(msg.get("id"))
+            self._received_responses.add(msg.get("id"))
 
             print(f'[CENTRAL] Received ACK_ID from {msg.get("id")}')
 
