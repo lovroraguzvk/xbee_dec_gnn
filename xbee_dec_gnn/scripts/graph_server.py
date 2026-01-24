@@ -332,63 +332,63 @@ class GraphGenerator():
         # Create graph based on positions and communication radius
         self.G = tg_utils.to_networkx(self.data, to_undirected=True)
 
-def publish_graph_image(self):
-    """Draw/update the graph in the matplotlib window (no ROS publishing)."""
+    def publish_graph_image(self):
+        """Draw/update the graph in the matplotlib window (no ROS publishing)."""
 
-    # Clear the previous plot and draw the updated graph
-    self.ax.clear()
-    self.ax.set_title(f"Graph index: {self.current_graph_index}")
-    self.ax.format_coord = lambda x, y: ''
+        # Clear the previous plot and draw the updated graph
+        self.ax.clear()
+        self.ax.set_title(f"Graph index: {self.current_graph_index}")
+        self.ax.format_coord = lambda x, y: ''
 
-    cmap = LinearSegmentedColormap.from_list('simple', ['white', 'red'])
+        cmap = LinearSegmentedColormap.from_list('simple', ['white', 'red'])
 
-    # Use loaded positions if in load mode, otherwise use circular layout
-    if self.graph_mode == "load" and self.node_positions:
-        # Convert string keys to integers and use loaded positions
-        pos = {int(node_id): position for node_id, position in self.node_positions.items()}
-    else:
-        # Use a fixed layout for consistent positioning
-        pos = nx.circular_layout(self.G)
+        # Use loaded positions if in load mode, otherwise use circular layout
+        if self.graph_mode == "load" and self.node_positions:
+            # Convert string keys to integers and use loaded positions
+            pos = {int(node_id): position for node_id, position in self.node_positions.items()}
+        else:
+            # Use a fixed layout for consistent positioning
+            pos = nx.circular_layout(self.G)
 
-    offset_x = max(p[0] for p in pos.values()) - min(p[0] for p in pos.values()) + 0.5
+        offset_x = max(p[0] for p in pos.values()) - min(p[0] for p in pos.values()) + 0.5
 
-    # NOTE: i is used later for figure size, so keep it initialized.
-    i = 0
-    for i in range(self.data.y.shape[1]):
-        if self.data.y[0][i] == -1:
-            break
+        # NOTE: i is used later for figure size, so keep it initialized.
+        i = 0
+        for i in range(self.data.y.shape[1]):
+            if self.data.y[0][i] == -1:
+                break
 
-        new_pos = {k: v.copy() for k, v in pos.items()}
-        for node in new_pos:
-            new_pos[node][0] += offset_x
+            new_pos = {k: v.copy() for k, v in pos.items()}
+            for node in new_pos:
+                new_pos[node][0] += offset_x
 
-        nx.draw(
-            self.G,
-            pos=new_pos,
-            ax=self.ax,
-            with_labels=True,
-            edgecolors="black",
-            node_size=500,
-            font_size=16,
-            font_weight="bold",
-            node_color=self.data.y[:, i].cpu().numpy(),
-            cmap=cmap,
-            vmin=0,
-            vmax=1,
-        )
+            nx.draw(
+                self.G,
+                pos=new_pos,
+                ax=self.ax,
+                with_labels=True,
+                edgecolors="black",
+                node_size=500,
+                font_size=16,
+                font_weight="bold",
+                node_color=self.data.y[:, i].cpu().numpy(),
+                cmap=cmap,
+                vmin=0,
+                vmax=1,
+            )
 
-    # Resize figure (optional; you had this before)
-    self.fig.set_size_inches(max(2.5 * max(i, 1), 6), 4)
+        # Resize figure (optional; you had this before)
+        self.fig.set_size_inches(max(2.5 * max(i, 1), 6), 4)
 
-    # Keep the "Next" button placed correctly
-    if self.gui_mode:
-        self.reposition_button()
-        self.button_ax.set_visible(True)
+        # Keep the "Next" button placed correctly
+        if self.gui_mode:
+            self.reposition_button()
+            self.button_ax.set_visible(True)
 
-    # >>> CHANGED: Just draw/flush; no ROS, no buffer, no image conversions
-    self.fig.canvas.draw_idle()
-    self.fig.canvas.flush_events()
-    plt.draw()
+        # >>> CHANGED: Just draw/flush; no ROS, no buffer, no image conversions
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+        plt.draw()
 
 
 def main(args):
