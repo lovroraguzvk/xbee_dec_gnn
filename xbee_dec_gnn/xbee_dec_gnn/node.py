@@ -79,13 +79,13 @@ class Node(ObjectWithLogger):
         self.stats = {"inference_time": [], "message_passing_time": [], "pooling_time": [], "round_time": []}
 
         # TODO: Load parameters
-        default_model_path = "/root/ros2_ws/src/ros2_dec_gnn/ros2_dec_gnn/config/models/dist-32.pth"
-        self.num_nodes = 5
-        self.gnn_model_path = default_model_path
+        # default_model_path = "/root/ros2_ws/src/ros2_dec_gnn/ros2_dec_gnn/config/models/dist-32.pth"
+        # self.num_nodes = 5
+        # self.gnn_model_path = default_model_path
 
-        # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
-        dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
-        self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
+        # # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
+        # dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
+        # self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
 
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
@@ -406,7 +406,7 @@ class Node(ObjectWithLogger):
         print(f"Round {self.round_counter} started.")
         round_start = time.perf_counter()
 
-        # initial_features = self.get_initial_features()
+        initial_features = self.get_initial_features()
 
 
         try:
