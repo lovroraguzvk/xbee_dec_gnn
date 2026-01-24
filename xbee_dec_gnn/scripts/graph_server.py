@@ -47,7 +47,7 @@ def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py
 
 class GraphGenerator():
     def __init__(self, graph_mode="load", gui_mode=False, port="/dev/ttyUSB0", baud_rate=9600, config="config.json"):
-        self.num_nodes = 5
+        self.num_nodes = 2
         self.graph_mode = graph_mode
         self.gui_mode = gui_mode
 

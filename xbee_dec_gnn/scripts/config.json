@@ -1,9 +1,9 @@
 {
   "hostnames_to_id" : {
-    "rpi0.local" : "A",
-    "rpi1.local" : "B",
-    "rpi2.local" : "C",
-    "rpi3.local" : "D",
-    "rpi4.local" : "E"
+    "rpi0" : "A",
+    "rpi1" : "B",
+    "rpi2" : "C",
+    "rpi3" : "D",
+    "rpi4" : "E"
   }
 }
