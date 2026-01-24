@@ -79,13 +79,13 @@ class Node(ObjectWithLogger):
         self.stats = {"inference_time": [], "message_passing_time": [], "pooling_time": [], "round_time": []}
 
         # TODO: Load parameters
-        # default_model_path = "/root/ros2_ws/src/ros2_dec_gnn/ros2_dec_gnn/config/models/dist-32.pth"
-        # self.num_nodes = 5
-        # self.gnn_model_path = default_model_path
+        default_model_path = "/root/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn/data/MIDS_model.pth"
+        self.num_nodes = 5
+        self.gnn_model_path = default_model_path
 
         # # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
-        # dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
-        # self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
+        dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
+        self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
 
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
@@ -107,7 +107,7 @@ class Node(ObjectWithLogger):
 
     #     self.local_subgraph: nx.Graph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
 
-    def _on_rx(self, xbee_message):
+    def receive_message_xbee(self, xbee_message):
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
@@ -180,7 +180,7 @@ class Node(ObjectWithLogger):
 
     def start(self):
         self.device.open()
-        self.device.add_data_received_callback(self._on_rx)
+        self.device.add_data_received_callback(self.receive_message_xbee)
 
         self.get_logger().info(f"[{self.node_name}] Port: {'/dev/ttyUSB0'} @ {9600}")
         self.get_logger().info(f"[{self.node_name}] Adresa: {self.device.get_64bit_addr()}")
@@ -337,17 +337,8 @@ class Node(ObjectWithLogger):
             "shape" : list(value.shape)
         }
 
-        data = json.dumps(msg).encode("utf-8")
         for neighbor in self.active_neighbors:
-            addr = XBee64BitAddress.from_hex_string(self.id_to_addr[neighbor])
-            try:
-                # self.device.send_data_64(addr, data)
-                self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
-                return True
-            except TransmitException as e:
-                status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                self.get_logger().debug(f"[{self.node_id}] TX FAIL to={neighbor} k={layer} status={status}")
-                return False
+            self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
 
     def receive_message_passing(self, msg):
         # Reconstruct tensor from flattened data and shape
@@ -393,6 +384,9 @@ class Node(ObjectWithLogger):
         else:
             msg["data"] = value.flatten().tolist()  # Flatten tensor to 1D list
             msg["shape"] = list(value.shape)  # Store original shape
+
+        for neighbor in self.active_neighbors:
+            self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
 
         
 
