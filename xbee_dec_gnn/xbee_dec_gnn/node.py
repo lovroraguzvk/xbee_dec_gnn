@@ -278,6 +278,9 @@ class Node(ObjectWithLogger):
     def send_message_xbee(self, msg, addr, node_id):
         data = json.dumps(msg).encode("utf-8")
         ok = False
+
+        print(msg)
+
         for attempt in range(1, 5): # TODO: make retries variable
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
