@@ -207,7 +207,7 @@ class GraphGenerator():
             sender_64 = xbee_message.remote_device.get_64bit_addr()
             node_id = self.hostnames_to_id[hostname]
 
-            self.id_to_addr[node_id] = sender_64
+            self.id_to_addr[node_id] = str(sender_64)
 
             print(f'[CENTRAL] Received INIT from {node_id} ({sender_64})')
 
