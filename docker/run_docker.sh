@@ -35,6 +35,7 @@ else
     --device /dev/serial/by-id/usb-FTDI_FT231X_USB_UART_D30AY52N-if00-port0:/dev/ttyUSB0 \
     --ipc host \
     --volume ~/.ssh/ssh_auth_sock:/ssh-agent \
+    --volume ~/.ssh:/root/.ssh \
     --volume /var/run/dbus:/var/run/dbus \
     --volume /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket \
     --volume $SCRIPT_DIR/volumes/datasets:/root/resources/data \
