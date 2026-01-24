@@ -158,13 +158,17 @@ class GraphGenerator():
         print("[CENTRAL] All INITs received, waiting for ACK_IDs")
 
         for node_id, addr in self.id_to_addr.items():
-            msg = {
-                    "type": "ACK_INIT",
-                    "id" : node_id,
-                    "id_to_addr" : self.id_to_addr
-                }
+            if addr is None:
+                print(f"[CENTRAL] WARNING: addr for {node_id} is None, skipping")
+                continue
 
+            msg = {
+                "type": "ACK_INIT",
+                "id": node_id,
+                "id_to_addr": self.id_to_addr
+            }
             self.send_message_xbee(msg, addr, node_id)
+
 
         self.final_ack_event.wait(timeout=interval_s)
 
