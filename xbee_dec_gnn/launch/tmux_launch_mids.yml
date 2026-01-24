@@ -56,14 +56,15 @@ windows:
           <%- if args[0] == "mixed" or args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@rpi0.local 'docker start -i xbee_gnn_cont'
           <%- end %>
-          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
-          python3 node.py
+          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
+          python3 -m xbee_dec_gnn.node
         - |
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@rpi1.local 'docker start -i xbee_gnn_cont'
           <%- end %>
-          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn
-          python3 node.py
+          cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
+          python3 -m xbee_dec_gnn.node
+
         # - |
         #   <%- if args[0] == "remote" %>
         #   ssh -o StrictHostKeyChecking=no -t pi@rpi2.local 'docker start -i xbee_gnn_cont'
