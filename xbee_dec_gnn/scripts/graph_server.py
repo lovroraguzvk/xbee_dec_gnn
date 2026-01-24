@@ -198,7 +198,7 @@ class GraphGenerator():
         if not ok:
             print(f"[CENTRAL] ERROR: Could not deliver ACK_INIT to {node_id}")
 
-        time.sleep(0.1)
+        time.sleep(0.2)
 
     def receive_message_xbee(self, xbee_message):
         try:

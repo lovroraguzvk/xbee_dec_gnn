@@ -25,18 +25,15 @@ RUN apt-get update && \
         libnss-mdns \
         libboost-python-dev \
         python3-pip \
-        python3-tk \
-        libnss-mdns \
-        avahi-utils \
-        dbus \
-    && sed -i 's/^hosts:.*/hosts:          files dns mdns4_minimal/' /etc/nsswitch.conf \
-    && rm -rf /var/lib/apt/lists/*
+        python3-tk
+
 
 RUN pip install --upgrade pip
 
 
+
 # ------------------------------------------------------------
-# STAGE 2: CORE (The main package and dependencies)
+# STAGE 2: CORE (The main package and dependencies))
 # ------------------------------------------------------------
 FROM ros2_base AS core
 
