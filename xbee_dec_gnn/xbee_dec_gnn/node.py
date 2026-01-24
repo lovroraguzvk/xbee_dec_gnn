@@ -153,6 +153,26 @@ class Node(ObjectWithLogger):
 
             self.graph_lock.set()
 
+        if msg.get("t") == "G" or msg.get("type") == "GRAPH":
+            # Neighbor list directly from central
+            nbrs = msg.get("n", [])
+
+            # Build minimal local subgraph: center node + edges to neighbors
+            self.local_subgraph = nx.Graph()
+            self.local_subgraph.add_node(self.node_id)
+            for nb in nbrs:
+                self.local_subgraph.add_edge(self.node_id, nb)
+
+            # Store only this node's features
+            x = msg.get("x")
+            if x is None:
+                raise ValueError("Missing node features in GRAPH message")
+
+            self.data = torch.tensor(x, dtype=torch.float32).unsqueeze(0)  # shape (1, F)
+
+            self.graph_lock.set()
+
+
         if msg.get("type") == "mp":
             self.receive_message_passing(msg)
         if msg.get("type") == "pooling":

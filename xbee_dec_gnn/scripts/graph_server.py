@@ -235,6 +235,8 @@ class GraphGenerator():
         # TODO: finish this and make it so each only gets its own neighbourhood
 
         for id, addr in self.id_to_addr.items():
+            
+
             msg = {
                 "type" : "GRAPH",
                 "graph6_str" :  GraphDataset.to_graph6(self.G),
@@ -243,6 +245,45 @@ class GraphGenerator():
             }
 
             self.send_message_xbee(msg, addr, id)
+
+    def send_node_info_small(self):
+        """
+        Send per-node neighborhood + per-node feature vector.
+        Keeps payload small enough for ~255 bytes (depending on feature size).
+        """
+
+        # Example: if G nodes are ints 0..N-1 and ids are "A","B", you MUST map them.
+        # If your ids are already ints, you can delete mapping.
+        # id_to_idx = {"A": 0, "B": 1, ...}
+        id_to_idx = {k: int(k) for k in self.id_to_addr.keys()}  # <-- CHANGE to your real mapping
+
+        for node_id, addr in self.id_to_addr.items():
+            if addr is None:
+                continue
+
+            idx = id_to_idx[node_id]
+
+            # 1-hop neighbors (use SAME ID space the node understands)
+            nbr_idxs = list(self.G.neighbors(idx))
+            # If nodes expect IDs like "A","B", convert here.
+            nbr_ids = nbr_idxs  # or: [idx_to_id[n] for n in nbr_idxs]
+
+            # node's own feature vector only
+            x_i = self.data.x[idx]              # shape: (F,)
+            # Keep it compact: float->Python float in JSON is expensive.
+            # If F is small you can do list(x_i.tolist()).
+            x_list = x_i.tolist()
+
+            # Use short keys to reduce JSON overhead
+            msg = {
+                "t": "G",       # type
+                "i": node_id,   # node id
+                "n": nbr_ids,   # neighbors
+                "x": x_list,    # features for THIS node only
+            }
+
+            self.send_message_xbee(msg, addr, node_id)
+
 
     def process_next_graph(self):
         """Generate/load and publish the next graph."""
@@ -265,7 +306,7 @@ class GraphGenerator():
 
         # TODO: xbee: send new graph to nodes
         
-        self.send_node_info()
+        self.send_node_info_small()
 
         # Update GUI display if in GUI mode
         if self.gui_mode:
@@ -328,6 +369,7 @@ class GraphGenerator():
         """Load the next graph from the dataset."""
         self.current_graph_index = random.randint(self.dataset_range[0], self.dataset_range[1])
         self.data = self.dataset[self.current_graph_index]
+        self.data.x = self.data.x[:, :8] # TODO: ONLY 8 FEATURES, CHANGE -------------------------------
 
         # Create graph based on positions and communication radius
         self.G = tg_utils.to_networkx(self.data, to_undirected=True)
