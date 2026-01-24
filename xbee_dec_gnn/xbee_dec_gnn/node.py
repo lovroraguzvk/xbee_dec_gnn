@@ -162,7 +162,7 @@ class Node(ObjectWithLogger):
         self.device.open()
         self.device.add_data_received_callback(self._on_rx)
 
-        self.get_logger().info(f"[{self.node_name}] Port: {self.port} @ {self.baud}")
+        self.get_logger().info(f"[{self.node_name}] Port: {'/dev/ttyUSB0'} @ {9600}")
         self.get_logger().info(f"[{self.node_name}] Adresa: {self.device.get_64bit_addr()}")
 
         print("Node initialized.")
