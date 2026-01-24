@@ -55,15 +55,15 @@ class GraphGenerator():
         self.node_positions = {}
 
         # Load graph dataset.
-        self.dataset = InMemoryDataset()
-        self.dataset.load(str(pathlib.Path(__file__).parents[1] / "config" / "data" / "MIDS_data.pt"))
-        dataset_range = {}
-        curr_index = 0
-        for size, num_graphs in zip(range(3, 9), [2, 6, 21, 112, 853, 11117]):
-            dataset_range[size] = (curr_index, curr_index + num_graphs - 1)
-            curr_index += num_graphs
-        self.dataset_range = dataset_range[self.num_nodes]
-        self.current_graph_index = 0
+        # self.dataset = InMemoryDataset()
+        # self.dataset.load(str(pathlib.Path(__file__).parents[1] / "config" / "data" / "MIDS_data.pt"))
+        # dataset_range = {}
+        # curr_index = 0
+        # for size, num_graphs in zip(range(3, 9), [2, 6, 21, 112, 853, 11117]):
+        #     dataset_range[size] = (curr_index, curr_index + num_graphs - 1)
+        #     curr_index += num_graphs
+        # self.dataset_range = dataset_range[self.num_nodes]
+        # self.current_graph_index = 0
 
         # Set up the plot
         self.fig, self.ax = plt.subplots(figsize=(8, 6))
