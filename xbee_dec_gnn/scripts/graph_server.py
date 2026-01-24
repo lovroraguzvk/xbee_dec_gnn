@@ -118,7 +118,7 @@ class GraphGenerator():
 
     def start(self):
         self.device.open()
-        self.device.add_data_received_callback(self.receive_message)
+        self.device.add_data_received_callback(self.receive_message_xbee)
 
         print(f"[CENTRAL] Port: {self.port} @ {self.baud}")
         print(f"[CENTRAL] Adresa: {self.device.get_64bit_addr()}")
@@ -200,7 +200,7 @@ class GraphGenerator():
 
         time.sleep(0.1)
 
-    def receive_message(self, xbee_message):
+    def receive_message_xbee(self, xbee_message):
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
