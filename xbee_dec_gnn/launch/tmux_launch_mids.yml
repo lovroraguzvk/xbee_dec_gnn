@@ -54,7 +54,9 @@ windows:
       panes:
         - |
           <%- if args[0] == "mixed" or args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@10.59.141.55 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi0.local 'docker run --rm -it \
+            --device=/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_D30AY52N-if00-port0:/dev/ttyUSB0 \
+            xbee_gnn_img'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           python3 -m xbee_dec_gnn.node
