@@ -62,7 +62,7 @@ class GraphGenerator():
         for size, num_graphs in zip(range(3, 9), [2, 6, 21, 112, 853, 11117]):
             dataset_range[size] = (curr_index, curr_index + num_graphs - 1)
             curr_index += num_graphs
-        self.dataset_range = dataset_range[self.num_nodes]
+        self.dataset_range = dataset_range[3] # TODO: PROMJENITI NAZAD NA self.num_nodes
         self.current_graph_index = 0
 
         # Set up the plot
