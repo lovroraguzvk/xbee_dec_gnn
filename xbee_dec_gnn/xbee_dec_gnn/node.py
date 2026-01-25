@@ -25,8 +25,8 @@ class ObjectWithLogger:
     def __init__(self):
         """Return a logger with a default ColoredFormatter."""
         formatter = ColoredFormatter(
-            "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
-            datefmt=None,
+            "%(log_color)s%(levelname)-5s%(reset)s %(cyan)s%(asctime)s%(reset)s [%(blue)s%(name)s%(reset)s] %(message)s",
+            datefmt="%H:%M:%S",
             reset=True,
             log_colors={
                 "DEBUG": "cyan",
@@ -43,6 +43,7 @@ class ObjectWithLogger:
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
         self.logger.setLevel(logging.DEBUG)
+        self.logger.propagate = False
 
     def get_logger(self):
         return self.logger
@@ -61,7 +62,7 @@ class Node(ObjectWithLogger):
         self.id_to_addr = None
         self.data = None
 
-        self.get_logger().info("GNN node process started: name=%s hostname=%s", self.node_name, self.hostname)
+        self.get_logger().info("Node online: name=%s hostname=%s", self.node_name, self.hostname)
 
         self.value = torch.Tensor()  # The current representation of the node.
         self.output = torch.Tensor()  # The interpretable output of the GNN after each layer.
@@ -112,7 +113,7 @@ class Node(ObjectWithLogger):
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
-            self.get_logger().exception("RX: failed to decode JSON payload from XBee message")
+            self.get_logger().exception("RX decode failed (non-JSON XBee payload)")
             return
 
         if msg.get("type") == "DISCOVERY":
@@ -179,19 +180,19 @@ class Node(ObjectWithLogger):
         self.device.open()
         self.device.add_data_received_callback(self.receive_message_xbee)
 
-        self.get_logger().info(f"[{self.node_name}] Port: {'/dev/ttyUSB0'} @ {9600}")
-        self.get_logger().info(f"[{self.node_name}] Adresa: {self.device.get_64bit_addr()}")
+        self.get_logger().info(f"Port: {self.device.get_serial_port()} @ {self.device.get_baud_rate()}")
+        self.get_logger().info(f"XBee addr64: {self.device.get_64bit_addr()}")
 
-        self.get_logger().info("Node initialized; waiting for discovery broadcast (DISCOVERY) from central")
+        self.get_logger().info("Waiting for DISCOVERY from central...")
 
         self.bcast_lock.wait()
-        self.get_logger().info("Handshake: received DISCOVERY; sent INIT; waiting for REGISTER_ACK (id assignment)")
+        self.get_logger().info("Handshake: DISCOVERY received; INIT sent; awaiting REGISTER_ACK (id assignment)")
 
         self.init_id_lock.wait()
-        self.get_logger().info("Handshake: received REGISTER_ACK; sent ID_CONFIRM; waiting for GRAPH payload")
+        self.get_logger().info("Handshake: REGISTER_ACK received; ID_CONFIRM sent; awaiting GRAPH payload")
 
         self.graph_lock.wait()
-        self.get_logger().info("Setup: graph/features received; entering GNN compute loop")
+        self.get_logger().info("Setup complete: graph/features loaded; starting GNN loop")
 
     def get_neighbors(self):
         self.active_neighbors = []
@@ -210,13 +211,13 @@ class Node(ObjectWithLogger):
         ready = len(self.active_neighbors) > 0
 
         if ready:
-            self.get_logger().info(f"Active neighbors: {self.active_neighbors}")
+            self.get_logger().info(f"Active neighbors -> {self.active_neighbors}")
         return ready
 
     def get_initial_features(self):
         # Compute the initial feature vector for this node (already received over XBee).
         self.value = self.data
-        self.get_logger().debug(f"Initial feature vector for node: {self.value}")
+        self.get_logger().debug(f"Init features: {self.value}")
         self.get_logger().debug(f"Local subgraph edges: {list(self.local_subgraph.edges())}")
         return self.value
 
@@ -261,7 +262,7 @@ class Node(ObjectWithLogger):
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
-        self.get_logger().debug("GNN: message passing done (mean=%.6f)", float(node_value.mean()))
+        self.get_logger().debug("Message passing done (mean=%.6f)", float(node_value.mean()))
 
         return node_value
 
@@ -293,7 +294,7 @@ class Node(ObjectWithLogger):
             raise RuntimeError("Pooling did not converge.")
 
         self.stats["pooling_time"].append(time.perf_counter() - pooling_start)
-        self.get_logger().debug("GNN: pooling done (mean=%.6f)", float(final_value.mean()))
+        self.get_logger().debug("Pooling done (mean=%.6f)", float(final_value.mean()))
         return final_value
 
     def run_prediction(self, graph_value: torch.Tensor):
