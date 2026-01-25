@@ -86,8 +86,8 @@ class Node(ObjectWithLogger):
         self.gnn_model_path = default_model_path
 
         # # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
-        # dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
-        # self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
+        dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
+        self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
 
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
