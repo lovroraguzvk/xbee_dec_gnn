@@ -198,7 +198,8 @@ class Node(ObjectWithLogger):
 
         # We know the whole graph in development mode.
         if self.local_subgraph.number_of_nodes() > 0:
-            self.active_neighbors = [f"{self.node_prefix}{i}" for i in self.local_subgraph.neighbors(self.node_id)]
+            # Use integer IDs directly to match id_to_addr keys
+            self.active_neighbors = list(self.local_subgraph.neighbors(self.node_id))
 
         if not nx.is_connected(self.local_subgraph):
             self.get_logger().fatal(
@@ -381,7 +382,7 @@ class Node(ObjectWithLogger):
         }
 
         if isinstance(value, dict):  # This enables pooling by flooding
-            msg["sources"] = list(value.keys)
+            msg["sources"] = list(value.keys())
 
             data = torch.stack(list(value.values()), dim=0)
             msg["data"] = data.flatten().tolist()  # Flatten tensor to 1D list
@@ -408,10 +409,11 @@ class Node(ObjectWithLogger):
         # TODO: Adapt for Xbee
 
         self.get_logger().debug(f"Received pooling message from {msg['sender']} at iteration {msg['i']}")
-        if len(msg.sources) > 0:
+        sources = msg.get("sources", [])
+        if len(sources) > 0:
             # Reconstruct dict of tensors from flattened data and shape
             data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
-            tensor_data = {source: data[i] for i, source in enumerate(msg["sources"])}
+            tensor_data = {source: data[i] for i, source in enumerate(sources)}
         else:
             # Reconstruct tensor from flattened data and shape
             tensor_data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))

@@ -86,19 +86,34 @@ class GraphGenerator(ObjectWithLogger):
         baud_rate=9600,
         config="config.json",
         feature_dim: int | None = 8,
+        graph_size: int | None = None,
     ):
         super().__init__(logger_name="central")
-        self.num_nodes = 2
         self.graph_mode = graph_mode
         self.gui_mode = gui_mode
         if feature_dim is not None and feature_dim <= 0:
             feature_dim = None
         self.feature_dim = feature_dim
+        # Load config first to get num_nodes
+        cfg = load_config(config)
+        self.hostnames_to_id = cfg["hostnames_to_id"]
+        self.num_nodes = len(self.hostnames_to_id)
 
-        self.G = nx.cycle_graph(self.num_nodes)
-        self.node_positions = {}
+        # Validate and set graph_size
+        if graph_size is None:
+            self.graph_size = self.num_nodes
+        elif graph_size < self.num_nodes:
+            raise ValueError(f"graph_size ({graph_size}) must be >= num_nodes ({self.num_nodes})")
+        else:
+            self.graph_size = graph_size
 
-        # Load graph dataset.
+        self.get_logger().info(
+            "Configuration: num_nodes=%d (active), graph_size=%d (dataset)",
+            self.num_nodes,
+            self.graph_size,
+        )
+
+        # Load graph dataset and select appropriate size range
         self.dataset = InMemoryDataset()
         self.dataset.load(str(ROOT / "xbee_dec_gnn" / "xbee_dec_gnn" / "data" / "MIDS_data.pt"))
         dataset_range = {}
@@ -106,8 +121,20 @@ class GraphGenerator(ObjectWithLogger):
         for size, num_graphs in zip(range(3, 9), [2, 6, 21, 112, 853, 11117]):
             dataset_range[size] = (curr_index, curr_index + num_graphs - 1)
             curr_index += num_graphs
-        self.dataset_range = dataset_range[3] # TODO: PROMJENITI NAZAD NA self.num_nodes
+
+        if self.graph_size not in dataset_range:
+            self.get_logger().warning(
+                "graph_size=%d not in dataset; defaulting to size 3", self.graph_size
+            )
+            self.dataset_range = dataset_range[3]
+        else:
+            self.dataset_range = dataset_range[self.graph_size]
+
         self.current_graph_index = 0
+
+        # Now we can use num_nodes and graph_size
+        self.G = nx.cycle_graph(self.num_nodes)
+        self.node_positions = {}
 
         # Set up the plot
         self.fig, self.ax = plt.subplots(figsize=(8, 6))
@@ -116,26 +143,12 @@ class GraphGenerator(ObjectWithLogger):
 
         # Create button for GUI mode
         if self.gui_mode:
-            # Add button - will be repositioned after each graph update
             self.button_ax = self.fig.add_axes([0.02, 0.02, 0.12, 0.05])
             self.next_button = Button(self.button_ax, 'Next')
             self.next_button.on_clicked(self.on_next_button_clicked)
 
         self.prev_image = None
         self.ax_range = None
-
-        # Set up a callback group for the publishers
-        # self.blocked_group = MutuallyExclusiveCallbackGroup()
-        # self.continuous_group = MutuallyExclusiveCallbackGroup()
-
-        # self.graph_pub = self.create_publisher(GraphData, "/graph_topic", msg_qos)
-        # self.image_pub = self.create_publisher(Image, "/graph_visualization", 1)
-        # self.image_pub_prev = self.create_publisher(Image, "/graph_visualization_prev", 1)
-
-        #TODO: xbee: init central node device, set callback and fetch addresses
-
-        cfg = load_config(config)
-        self.hostnames_to_id = cfg["hostnames_to_id"]
 
         self.port = port
         self.baud = baud_rate
@@ -280,12 +293,7 @@ class GraphGenerator(ObjectWithLogger):
             
 
     def send_node_info(self):
-
-        # TODO: finish this and make it so each only gets its own neighbourhood
-
         for id, addr in self.id_to_addr.items():
-            
-
             msg = {
                 "type" : "GRAPH",
                 "graph6_str" :  GraphDataset.to_graph6(self.G),
@@ -309,7 +317,10 @@ class GraphGenerator(ObjectWithLogger):
                 continue
 
             idx = id_to_idx[node_id]
-            nbr_ids = list(self.G.neighbors(idx))
+            
+            # Only use neighbors that are in our active node set
+            all_neighbors = list(self.G.neighbors(idx))
+            nbr_ids = [n for n in all_neighbors if n in id_to_idx]
 
             x_i = self.data.x[idx]  # shape: (F,)
             x_list = x_i.tolist()
@@ -521,6 +532,7 @@ def main(args):
         port=args.port,
         config=args.config,
         feature_dim=args.feature_dim,
+        graph_size=args.graph_size,
     )
 
     try:
@@ -594,6 +606,12 @@ if __name__ == "__main__":
         type=int,
         default=8,
         help="Number of per-node features to send. Set to 0 or negative to send all features.",
+    )
+    args.add_argument(
+        "--graph-size",
+        type=int,
+        default=None,
+        help="Size of graphs to load from dataset (must be >= num_nodes). Use 3 when testing with 2 nodes.",
     )
     parsed_args = args.parse_args()
     if parsed_args.feature_dim is not None and parsed_args.feature_dim <= 0:
