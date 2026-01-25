@@ -320,6 +320,9 @@ class Node(ObjectWithLogger):
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
+                #print payload size in bytes
+                self.get_logger().debug("TX: payload size=%d bytes", len(data))
+
                 self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s)", node_id, attempt, status)
                 time.sleep(0.1)
 
