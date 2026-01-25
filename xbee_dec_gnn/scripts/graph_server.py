@@ -185,7 +185,7 @@ class GraphGenerator(ObjectWithLogger):
 
         self.get_logger().info("Central online: port=%s baud=%s", self.port, self.baud)
         self.get_logger().info("Central XBee 64-bit addr: %s", self.device.get_64bit_addr())
-        self.get_logger().info("Handshake: broadcasting BCAST; waiting for INIT from nodes")
+        self.get_logger().info("Handshake: broadcasting DISCOVERY; waiting for INIT from nodes")
 
         my_addr = str(self.device.get_64bit_addr())
 
@@ -438,16 +438,41 @@ class GraphGenerator(ObjectWithLogger):
 
     def load_next_graph(self):
         """Load the next graph from the dataset."""
-        self.current_graph_index = random.randint(self.dataset_range[0], self.dataset_range[1])
-        self.data = self.dataset[self.current_graph_index]
-        if self.feature_dim is not None:
-            self.data.x = self.data.x[:, : self.feature_dim]
-        self.get_logger().debug(
-            "Loaded graph idx=%d with feature_dim=%d", self.current_graph_index, self.data.x.shape[1]
+        active_node_ids = set(self.id_to_addr.keys())
+        
+        # Try to find a graph where active nodes are connected
+        for _ in range(50):  # Try up to 50 graphs
+            self.current_graph_index = random.randint(self.dataset_range[0], self.dataset_range[1])
+            self.data = self.dataset[self.current_graph_index]
+            if self.feature_dim is not None:
+                self.data.x = self.data.x[:, : self.feature_dim]
+            
+            # Create graph based on positions and communication radius
+            self.G = tg_utils.to_networkx(self.data, to_undirected=True)
+            
+            # Check if subgraph of active nodes is connected
+            subgraph = self.G.subgraph(active_node_ids)
+            if nx.is_connected(subgraph):
+                self.get_logger().debug(
+                    "Loaded graph idx=%d with feature_dim=%d (active subgraph connected)",
+                    self.current_graph_index, self.data.x.shape[1]
+                )
+                return
+        
+        # Fallback: use last graph but add edges to make active nodes connected
+        self.get_logger().warning(
+            "Could not find graph with connected active subgraph; adding edges to connect active nodes"
         )
-
-        # Create graph based on positions and communication radius
-        self.G = tg_utils.to_networkx(self.data, to_undirected=True)
+        # Create a path among active nodes to ensure connectivity
+        active_list = sorted(active_node_ids)
+        for i in range(len(active_list) - 1):
+            if not self.G.has_edge(active_list[i], active_list[i + 1]):
+                self.G.add_edge(active_list[i], active_list[i + 1])
+        
+        self.get_logger().debug(
+            "Loaded graph idx=%d with feature_dim=%d (forced connectivity)",
+            self.current_graph_index, self.data.x.shape[1]
+        )
 
     def publish_graph_image(self):
         """Draw/update the graph in the matplotlib window (no ROS publishing)."""
