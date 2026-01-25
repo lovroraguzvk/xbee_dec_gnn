@@ -179,11 +179,13 @@ class Node(ObjectWithLogger):
 
             # Compact per-node payload (neighbors + own features)
             if "n" in msg and "x" in msg:
-                self._apply_graph_payload(msg.get("n", []), msg.get("x"))
+                graph_node_id = msg.get("id", self.node_id)
+                self._apply_graph_payload(graph_node_id, msg.get("n", []), msg.get("x"))
                 return
 
         if msg.get("t") == "G":  # short type for compact payloads
-            self._apply_graph_payload(msg.get("n", []), msg.get("x"))
+            graph_node_id = msg.get("id", self.node_id)
+            self._apply_graph_payload(graph_node_id, msg.get("n", []), msg.get("x"))
             return
 
 
@@ -237,7 +239,13 @@ class Node(ObjectWithLogger):
         self.get_logger().debug(f"Local subgraph edges: {list(self.local_subgraph.edges())}")
         return self.value
 
-    def _apply_graph_payload(self, neighbors, features):
+    def _apply_graph_payload(self, node_id, neighbors, features):
+        # Use provided node_id, fallback to self.node_id
+        if node_id is not None:
+            self.node_id = node_id
+        
+        self.get_logger().debug("_apply_graph_payload: node_id=%s neighbors=%s", self.node_id, neighbors)
+        
         self.local_subgraph = nx.Graph()
         self.local_subgraph.add_node(self.node_id)
         for nb in neighbors:
