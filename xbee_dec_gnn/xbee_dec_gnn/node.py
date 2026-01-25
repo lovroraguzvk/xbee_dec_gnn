@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import time, logging, json, threading, socket, argparse
+import time, logging, json, threading, socket, argparse, base64, uuid
 from collections import defaultdict
 from typing import Dict, Any # dodano
 from digi.xbee.devices import ZigBeeDevice # dodano
@@ -100,6 +100,12 @@ class Node(ObjectWithLogger):
         self.init_id_lock = threading.Event()
         self.graph_lock = threading.Event()
 
+        # Fragmentation support
+        self.MAX_PAYLOAD = 200  # Leave room for fragment header within 255 byte limit
+        self._frag_buffer: Dict[str, Dict[int, bytes]] = {}  # msg_id -> {frag_idx -> data}
+        self._frag_meta: Dict[str, int] = {}  # msg_id -> total_frags
+        self._frag_lock = threading.Lock()
+
     def run(self):
         # Main loop of the node.
         while True:
@@ -118,6 +124,13 @@ class Node(ObjectWithLogger):
         except Exception:
             self.get_logger().exception("RX decode failed (non-JSON XBee payload)")
             return
+
+        # Handle fragmented messages
+        if "_fid" in msg:
+            reassembled = self._handle_fragment(msg)
+            if reassembled is None:
+                return  # Still waiting for more fragments
+            msg = reassembled
 
         if msg.get("type") == "DISCOVERY":
             self.central_addr = msg.get("addr")
@@ -307,29 +320,82 @@ class Node(ObjectWithLogger):
     
     def send_message_xbee(self, msg, addr, node_id):
         data = json.dumps(msg).encode("utf-8")
-        ok = False
 
         if isinstance(addr, str):
             addr = XBee64BitAddress.from_hex_string(addr)
 
-        for attempt in range(1, 5): # TODO: make retries variable
+        # Fragment if payload exceeds limit
+        if len(data) > self.MAX_PAYLOAD:
+            self._send_fragmented(data, addr, node_id, msg.get("type"))
+            return
+
+        self._send_raw(data, addr, node_id, msg.get("type"))
+
+    def _send_raw(self, data: bytes, addr, node_id, msg_type: str):
+        ok = False
+        for attempt in range(1, 5):
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                self.get_logger().debug("TX: %s -> %s (mac=%s attempt=%d)", msg.get("type"), node_id, addr, attempt)
+                self.get_logger().debug("TX: %s -> %s (len=%d attempt=%d)", msg_type, node_id, len(data), attempt)
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                #print payload size in bytes
-                self.get_logger().debug("TX: payload size=%d bytes", len(data))
-
-                self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s)", node_id, attempt, status)
+                self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s len=%d)", node_id, attempt, status, len(data))
                 time.sleep(0.1)
 
         if not ok:
-            self.get_logger().error("TX: giving up delivering %s to %s (addr=%s)", msg.get("type"), node_id, addr)
+            self.get_logger().error("TX: giving up %s to %s (addr=%s)", msg_type, node_id, addr)
 
-        time.sleep(0.1)
+        time.sleep(0.05)
+
+    def _send_fragmented(self, data: bytes, addr, node_id, msg_type: str):
+        """Split large payload into fragments and send each."""
+        msg_id = uuid.uuid4().hex[:8]  # Short unique ID
+        encoded = base64.b64encode(data).decode("ascii")
+
+        # Calculate chunk size (leave room for fragment JSON wrapper)
+        chunk_size = self.MAX_PAYLOAD - 60  # Reserve space for {"_fid":"...","_fi":X,"_fn":X,"_fd":""}
+        chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
+        total = len(chunks)
+
+        self.get_logger().debug("TX: fragmenting %s (%d bytes -> %d chunks)", msg_type, len(data), total)
+
+        for idx, chunk in enumerate(chunks):
+            frag_msg = {"_fid": msg_id, "_fi": idx, "_fn": total, "_fd": chunk}
+            frag_data = json.dumps(frag_msg).encode("utf-8")
+            self._send_raw(frag_data, addr, node_id, f"{msg_type}[{idx+1}/{total}]")
+
+    def _handle_fragment(self, msg: dict):
+        """Buffer fragment and return reassembled message when complete, else None."""
+        msg_id = msg["_fid"]
+        frag_idx = msg["_fi"]
+        total = msg["_fn"]
+        chunk = msg["_fd"]
+
+        with self._frag_lock:
+            if msg_id not in self._frag_buffer:
+                self._frag_buffer[msg_id] = {}
+                self._frag_meta[msg_id] = total
+
+            self._frag_buffer[msg_id][frag_idx] = chunk
+
+            # Check if all fragments received
+            if len(self._frag_buffer[msg_id]) < total:
+                self.get_logger().debug("RX: fragment %d/%d for msg %s", frag_idx + 1, total, msg_id)
+                return None
+
+            # Reassemble
+            self.get_logger().debug("RX: reassembling %d fragments for msg %s", total, msg_id)
+            ordered = [self._frag_buffer[msg_id][i] for i in range(total)]
+            encoded = "".join(ordered)
+            raw = base64.b64decode(encoded)
+
+            # Cleanup
+            del self._frag_buffer[msg_id]
+            del self._frag_meta[msg_id]
+
+        return json.loads(raw.decode("utf-8"))
 
     def send_message_passing(self, layer: int, value: torch.Tensor):
         # msg = GNNmessage()
