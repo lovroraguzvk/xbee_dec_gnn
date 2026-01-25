@@ -1,17 +1,10 @@
-
-import json
-from typing import Dict, Any
-
-def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py or something
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-    
-def main():
-    cfg = load_config("config.json")
-    hostnames_to_id = cfg["hostnames_to_id"]
-
-    print(dict.fromkeys(list(hostnames_to_id.values())))
-
-
-if __name__=="__main__":
-    main()
+import torch, copy
+src="/root/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn/data/MIDS_model.pth"
+dst="/root/other_ws/xbee_dec_gnn/xbee_dec_gnn/xbee_dec_gnn/data/MIDS_model_fixed.pth"
+d=torch.load(src, map_location="cpu")
+cfg=copy.deepcopy(d["config"])
+if "gnn_layers" not in cfg and "num_layers" in cfg:
+    cfg["gnn_layers"]=cfg.pop("num_layers")
+d["config"]=cfg
+torch.save(d,dst)
+print("Wrote",dst,"config keys:",sorted(cfg.keys()))
