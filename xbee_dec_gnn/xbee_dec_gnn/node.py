@@ -37,10 +37,11 @@ class ObjectWithLogger:
             },
         )
 
-        self.logger = logging.getLogger("example")
-        handler = logging.StreamHandler()
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        self.logger = logging.getLogger("xbee_dec_gnn")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
         self.logger.setLevel(logging.DEBUG)
 
     def get_logger(self):
@@ -60,7 +61,7 @@ class Node(ObjectWithLogger):
         self.id_to_addr = None
         self.data = None
 
-        print(f"GNN Node {self.node_name} has been started.")
+        self.get_logger().info("GNN node process started: name=%s hostname=%s", self.node_name, self.hostname)
 
         self.value = torch.Tensor()  # The current representation of the node.
         self.output = torch.Tensor()  # The interpretable output of the GNN after each layer.
@@ -111,10 +112,10 @@ class Node(ObjectWithLogger):
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
-            print("Failed")
+            self.get_logger().exception("RX: failed to decode JSON payload from XBee message")
             return
 
-        if msg.get("type") == "BCAST":
+        if msg.get("type") == "DISCOVERY":
             self.central_addr = msg.get("addr")
 
             new_msg = {
@@ -126,12 +127,12 @@ class Node(ObjectWithLogger):
 
             self.bcast_lock.set()
 
-        if msg.get("type") == "ACK_INIT":
+        if msg.get("type") == "REGISTER_ACK":
             self.node_id = msg.get("id")
             self.id_to_addr = msg.get("id_to_addr")
 
             new_msg = {
-                "type" : "ACK_ID",
+                "type" : "ID_CONFIRM",
                 "id" : self.node_id
             }
 
@@ -142,38 +143,34 @@ class Node(ObjectWithLogger):
             self.init_id_lock.set()
 
         if msg.get("type") == "GRAPH":
-            
-            G = nx.from_graph6_bytes(bytes(msg["graph6_str"].strip(), "ascii"))
-            self.local_subgraph: nx.Graph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
+            # Legacy full-graph payload (graph6 + full feature matrix)
+            if "graph6_str" in msg:
+                G = nx.from_graph6_bytes(bytes(msg["graph6_str"].strip(), "ascii"))
+                self.local_subgraph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
 
-            lambda2 = nx.laplacian_spectrum(G)[1]
-            self.get_logger().debug(f"Received graph {msg.data} with algebraic connectivity λ₂: {lambda2:.4f}")
+                lambda2 = nx.laplacian_spectrum(G)[1]
+                self.get_logger().debug(
+                    "RX: GRAPH received (\u03bb\u2082=%.4f, nodes=%d, edges=%d)",
+                    lambda2,
+                    G.number_of_nodes(),
+                    G.number_of_edges(),
+                )
 
-            self.data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
+                self.data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
+                self.graph_lock.set()
+                return
 
-            self.graph_lock.set()
+            # Compact per-node payload (neighbors + own features)
+            if "n" in msg and "x" in msg:
+                self._apply_graph_payload(msg.get("n", []), msg.get("x"))
+                return
 
-        if msg.get("t") == "G" or msg.get("type") == "GRAPH":
-            # Neighbor list directly from central
-            nbrs = msg.get("n", [])
-
-            # Build minimal local subgraph: center node + edges to neighbors
-            self.local_subgraph = nx.Graph()
-            self.local_subgraph.add_node(self.node_id)
-            for nb in nbrs:
-                self.local_subgraph.add_edge(self.node_id, nb)
-
-            # Store only this node's features
-            x = msg.get("x")
-            if x is None:
-                raise ValueError("Missing node features in GRAPH message")
-
-            self.data = torch.tensor(x, dtype=torch.float32).unsqueeze(0)  # shape (1, F)
-
-            self.graph_lock.set()
+        if msg.get("t") == "G":  # short type for compact payloads
+            self._apply_graph_payload(msg.get("n", []), msg.get("x"))
+            return
 
 
-        if msg.get("type") == "mp":
+        if msg.get("type") in ("MP", "mp"):
             self.receive_message_passing(msg)
         if msg.get("type") == "pooling":
             self.receive_pooling(msg)
@@ -185,21 +182,16 @@ class Node(ObjectWithLogger):
         self.get_logger().info(f"[{self.node_name}] Port: {'/dev/ttyUSB0'} @ {9600}")
         self.get_logger().info(f"[{self.node_name}] Adresa: {self.device.get_64bit_addr()}")
 
-        print("Node initialized.")
+        self.get_logger().info("Node initialized; waiting for discovery broadcast (DISCOVERY) from central")
 
-        print(f"[{self.node_name}] Waiting for BCAST from central")
-        
         self.bcast_lock.wait()
-
-        print(f"[{self.node_name}] Got BCAST, Waiting for my ID from central")
+        self.get_logger().info("Handshake: received DISCOVERY; sent INIT; waiting for REGISTER_ACK (id assignment)")
 
         self.init_id_lock.wait()
-
-        print(f"[{self.node_name}] Node initialized, waiting for graph")
+        self.get_logger().info("Handshake: received REGISTER_ACK; sent ID_CONFIRM; waiting for GRAPH payload")
 
         self.graph_lock.wait()
-
-        print(f"[{self.node_name}] Graph received, proceeding with calculating")
+        self.get_logger().info("Setup: graph/features received; entering GNN compute loop")
 
     def get_neighbors(self):
         self.active_neighbors = []
@@ -220,15 +212,28 @@ class Node(ObjectWithLogger):
             self.get_logger().info(f"Active neighbors: {self.active_neighbors}")
         return ready
 
-    def get_initial_features(self, msg):
-        # TODO: Adapt for Xbee
-
-
-        # Compute the initial feature vector for this node.
+    def get_initial_features(self):
+        # Compute the initial feature vector for this node (already received over XBee).
         self.value = self.data
         self.get_logger().debug(f"Initial feature vector for node: {self.value}")
         self.get_logger().debug(f"Local subgraph edges: {list(self.local_subgraph.edges())}")
         return self.value
+
+    def _apply_graph_payload(self, neighbors, features):
+        self.local_subgraph = nx.Graph()
+        self.local_subgraph.add_node(self.node_id)
+        for nb in neighbors:
+            self.local_subgraph.add_edge(self.node_id, nb)
+
+        if features is None:
+            raise ValueError("Missing node features in GRAPH message")
+
+        x_tensor = torch.tensor(features, dtype=torch.float32)
+        if x_tensor.ndim == 1:
+            x_tensor = x_tensor.unsqueeze(0)
+
+        self.data = x_tensor
+        self.graph_lock.set()
 
     def run_message_passing(self, initial_features: torch.Tensor):
         inference_time = 0.0
@@ -255,7 +260,7 @@ class Node(ObjectWithLogger):
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
-        print(f"Node value after message passing: {node_value.mean()}")
+        self.get_logger().debug("GNN: message passing done (mean=%.6f)", float(node_value.mean()))
 
         return node_value
 
@@ -287,7 +292,7 @@ class Node(ObjectWithLogger):
             raise RuntimeError("Pooling did not converge.")
 
         self.stats["pooling_time"].append(time.perf_counter() - pooling_start)
-        print(f"Graph value after pooling: {final_value.mean()}")
+        self.get_logger().debug("GNN: pooling done (mean=%.6f)", float(final_value.mean()))
         return final_value
 
     def run_prediction(self, graph_value: torch.Tensor):
@@ -306,15 +311,15 @@ class Node(ObjectWithLogger):
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                print(f"[{self.node_name}] {msg.get('type')} -> {node_id}, MAC -> {addr} (attempt {attempt})")
+                self.get_logger().debug("TX: %s -> %s (mac=%s attempt=%d)", msg.get("type"), node_id, addr, attempt)
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                print(f"[{self.node_name}] TX FAIL -> {node_id} attempt={attempt} status={status}")
+                self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s)", node_id, attempt, status)
                 time.sleep(0.1)
 
         if not ok:
-            print(f"[CENTRAL] ERROR: Could not deliver ACK_INIT to {node_id}")
+            self.get_logger().error("TX: giving up delivering %s to %s (addr=%s)", msg.get("type"), node_id, addr)
 
         time.sleep(0.1)
 
@@ -415,12 +420,12 @@ class Node(ObjectWithLogger):
     def compute_gnn(self):
         ready = self.get_neighbors()
         if not ready:
-            print("Waiting for neighbors...")
+            self.get_logger().info("Waiting for neighbors...")
             time.sleep(1.0)
             return
 
         self.round_counter += 1
-        print(f"Round {self.round_counter} started.")
+        self.get_logger().info("Round %d started", self.round_counter)
         round_start = time.perf_counter()
 
         initial_features = self.get_initial_features()
@@ -432,11 +437,11 @@ class Node(ObjectWithLogger):
             graph_value = self.run_prediction(graph_value)
             graph_value = graph_value.item()
         except TimeoutError as e:
-            print(f"{e} Canceling and proceeding to next round.")
+            self.get_logger().warning("Timeout: %s (canceling round %d)", e, self.round_counter)
             return
 
         self.stats["round_time"].append(time.perf_counter() - round_start)
-        print(f"Node computed graph value {graph_value:.3f} in round {self.round_counter}.\n")
+        self.get_logger().info("Round %d complete: graph_value=%.3f", self.round_counter, graph_value)
 
         # TODO: Adatpt for Xbee
         # led_color = LEDMatrix.from_colormap(graph_value / self.num_nodes, color_space="hsv", cmap_name="jet")
@@ -451,7 +456,7 @@ class Node(ObjectWithLogger):
                 key,
                 [f"{np.mean(values):.4f}", f"{np.std(values):.4f}", f"{np.max(values):.4f}", f"{np.min(values):.4f}"],
             )
-        print(f"\n{table}")
+        self.get_logger().info("\n%s", table)
 
 
 def main(args=None):

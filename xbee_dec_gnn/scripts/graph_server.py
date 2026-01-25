@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import argparse
+import logging
 import random
 import io
 import pathlib
@@ -25,6 +26,7 @@ from my_graphs_dataset import GraphDataset
 
 import json, time, threading
 from pathlib import Path
+from colorlog import ColoredFormatter
 from typing import Dict, Any 
 from digi.xbee.devices import ZigBeeDevice 
 from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress
@@ -45,11 +47,53 @@ def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-class GraphGenerator():
-    def __init__(self, graph_mode="load", gui_mode=False, port="/dev/ttyUSB0", baud_rate=9600, config="config.json"):
+
+
+class ObjectWithLogger:
+    def __init__(self, logger_name: str = "xbee_dec_gnn"):
+        super().__init__(logger_name="central")
+        """Create/get a logger with a ColoredFormatter (stdout)."""
+        formatter = ColoredFormatter(
+            "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
+            datefmt=None,
+            reset=True,
+            log_colors={
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "red",
+            },
+        )
+
+        self.logger = logging.getLogger(logger_name)
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
+
+    def get_logger(self):
+        return self.logger
+
+
+class GraphGenerator(ObjectWithLogger):
+    def __init__(
+        self,
+        graph_mode="load",
+        gui_mode=False,
+        port="/dev/ttyUSB0",
+        baud_rate=9600,
+        config="config.json",
+        feature_dim: int | None = 8,
+    ):
+        super().__init__(logger_name="central")
         self.num_nodes = 2
         self.graph_mode = graph_mode
         self.gui_mode = gui_mode
+        if feature_dim is not None and feature_dim <= 0:
+            feature_dim = None
+        self.feature_dim = feature_dim
 
         self.G = nx.cycle_graph(self.num_nodes)
         self.node_positions = {}
@@ -98,8 +142,8 @@ class GraphGenerator():
 
         self.id_to_addr = dict.fromkeys(list(self.hostnames_to_id.values()))
         self._received_responses = set()
-        self.final_init_event = threading.Event()
-        self.final_ack_event = threading.Event()
+        self.final_reg_event = threading.Event()
+        self.final_confirm_event = threading.Event()
         self.wait_forever = True
         self.init_timeout_s = 30.0
 
@@ -119,20 +163,20 @@ class GraphGenerator():
             )
             self._timer_thread.start()
 
-            # print("Non-gui not implemented yet") # TODO: implement
+            # Non-GUI mode for manual stepping not implemented yet.
 
     def start(self):
         self.device.open()
         self.device.add_data_received_callback(self.receive_message_xbee)
 
-        print(f"[CENTRAL] Port: {self.port} @ {self.baud}")
-        print(f"[CENTRAL] Adresa: {self.device.get_64bit_addr()}")
-        print(f"[CENTRAL] Waiting for INIT from others (broadcasting MAC)")
+        self.get_logger().info("Central online: port=%s baud=%s", self.port, self.baud)
+        self.get_logger().info("Central XBee 64-bit addr: %s", self.device.get_64bit_addr())
+        self.get_logger().info("Handshake: broadcasting BCAST; waiting for INIT from nodes")
 
         my_addr = str(self.device.get_64bit_addr())
 
         msg = {
-            "type": "BCAST",
+            "type": "DISCOVERY",
             "addr": my_addr,
         }
         
@@ -141,43 +185,43 @@ class GraphGenerator():
         interval_s = 1.0
         start_time = time.time()
 
-        while not self.final_init_event.is_set():
+        while not self.final_reg_event.is_set():
             if not self.wait_forever:
                 elapsed = time.time() - start_time
                 if elapsed >= self.init_timeout_s:
                     raise TimeoutError(
-                        f"[CENTRAL] Only received {len(self.final_acks)}/{self.num_nodes} INITs"
+                        f"[CENTRAL] Only received {len(self._received_responses)}/{self.num_nodes} INITs"
                     )
 
             # --- broadcast INIT ---
             try:
                 self.device.send_data_64_16(BCAST_64, BCAST_16, data)
-                print(f"[CENTRAL] Broadcast BCAST (mac={my_addr})")
+                self.get_logger().debug("TX: BCAST broadcast (central_mac=%s)", my_addr)
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                print(f"[CENTRAL] Broadcast failed: status={status}")
+                self.get_logger().warning("TX: BCAST broadcast failed (status=%s)", status)
 
             # --- wait but wake early if ACKs complete ---
-            self.final_init_event.wait(timeout=interval_s)
+            self.final_reg_event.wait(timeout=interval_s)
 
-        print("[CENTRAL] All INITs received, waiting for ACK_IDs")
+        self.get_logger().info("Handshake: all INIT received; sending ACK_INIT to assign ids; waiting for ACK_ID confirmations")
 
         for node_id, addr in self.id_to_addr.items():
-            if addr is None:
-                print(f"[CENTRAL] WARNING: addr for {node_id} is None, skipping")
+            if addr is None:             
+                self.get_logger().warning("Handshake: addr for node_id=%s is None; skipping ACK_INIT", node_id)
                 continue
 
             msg = {
-                "type": "ACK_INIT",
+                "type": "REGISTER_ACK",
                 "id": node_id,
                 "id_to_addr": self.id_to_addr
             }
             self.send_message_xbee(msg, addr, node_id)
 
 
-        self.final_ack_event.wait(timeout=interval_s)
+        self.final_confirm_event.wait(timeout=interval_s)
 
-        print("[CENTRAL] All ACK_IDs received")
+        self.get_logger().info("Handshake: all ID_CONFIRM confirmations received")
 
 
 
@@ -193,15 +237,15 @@ class GraphGenerator():
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                print(f"[CENTRAL] {msg.get('type')} -> {node_id}, MAC -> {addr} (attempt {attempt})")
+                self.get_logger().debug("TX: %s -> %s (mac=%s attempt=%d)", msg.get("type") or msg.get("t"), node_id, addr, attempt)
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                print(f"[CENTRAL] TX FAIL -> {node_id} attempt={attempt} status={status}")
+                self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s)", node_id, attempt, status)
                 time.sleep(0.1)
 
         if not ok:
-            print(f"[CENTRAL] ERROR: Could not deliver ACK_INIT to {node_id}")
+            self.get_logger().error("TX: giving up delivering %s to %s (addr=%s)", msg.get("type") or msg.get("t"), node_id, addr)
 
         time.sleep(0.2)
 
@@ -211,28 +255,28 @@ class GraphGenerator():
         except Exception:
             return
         
-        if msg.get("type") == "INIT":
+        if msg.get("type") == "NODE_REGISTER":
             hostname = msg.get("hostname")
             sender_64 = xbee_message.remote_device.get_64bit_addr()
             node_id = self.hostnames_to_id[hostname]
 
             self.id_to_addr[node_id] = str(sender_64)
 
-            print(f'[CENTRAL] Received INIT from {node_id} ({sender_64})')
+            self.get_logger().info("RX: NODE_REGISTER from node_id=%s mac=%s hostname=%s", node_id, sender_64, hostname)
 
             self._received_responses.add(hostname)
 
             if len(self._received_responses) >= self.num_nodes:
                 self._received_responses = set()
-                self.final_init_event.set()
+                self.final_reg_event.set()
 
-        if msg.get("type") == "ACK_ID":
+        if msg.get("type") == "ID_CONFIRM":
             self._received_responses.add(msg.get("id"))
 
-            print(f'[CENTRAL] Received ACK_ID from {msg.get("id")}')
+            self.get_logger().info("RX: ID_CONFIRM from node_id=%s", msg.get("id"))
 
             if len(self._received_responses) >= self.num_nodes:
-                self.final_ack_event.set()
+                self.final_confirm_event.set()
             
 
     def send_node_info(self):
@@ -253,39 +297,44 @@ class GraphGenerator():
 
     def send_node_info_small(self):
         """
-        Send per-node neighborhood + per-node feature vector.
-        Keeps payload small enough for ~255 bytes (depending on feature size).
+        Send per-node neighborhood + per-node feature vector only.
+        Designed to stay under XBee's ~255 byte payload; logs payload size so
+        you can tune feature_dim.
         """
 
-        # Example: if G nodes are ints 0..N-1 and ids are "A","B", you MUST map them.
-        # If your ids are already ints, you can delete mapping.
-        # id_to_idx = {"A": 0, "B": 1, ...}
-        id_to_idx = {k: int(k) for k in self.id_to_addr.keys()}  # <-- CHANGE to your real mapping
+        id_to_idx = {k: int(k) for k in self.id_to_addr.keys()}  # map node ids to dataset indices
 
         for node_id, addr in self.id_to_addr.items():
             if addr is None:
                 continue
 
             idx = id_to_idx[node_id]
+            nbr_ids = list(self.G.neighbors(idx))
 
-            # 1-hop neighbors (use SAME ID space the node understands)
-            nbr_idxs = list(self.G.neighbors(idx))
-            # If nodes expect IDs like "A","B", convert here.
-            nbr_ids = nbr_idxs  # or: [idx_to_id[n] for n in nbr_idxs]
-
-            # node's own feature vector only
-            x_i = self.data.x[idx]              # shape: (F,)
-            # Keep it compact: float->Python float in JSON is expensive.
-            # If F is small you can do list(x_i.tolist()).
+            x_i = self.data.x[idx]  # shape: (F,)
             x_list = x_i.tolist()
 
-            # Use short keys to reduce JSON overhead
             msg = {
-                "t": "G",       # type
-                "i": node_id,   # node id
-                "n": nbr_ids,   # neighbors
-                "x": x_list,    # features for THIS node only
+                "type": "GRAPH",
+                "id": node_id,
+                "n": nbr_ids,  # neighbor list only
+                "x": x_list,   # features only for this node
             }
+
+            payload_bytes = len(json.dumps(msg).encode("utf-8"))
+            self.get_logger().debug(
+                "GRAPH payload size -> node_id=%s bytes=%d (features=%d, neighbors=%d)",
+                node_id,
+                payload_bytes,
+                len(x_list),
+                len(nbr_ids),
+            )
+            if payload_bytes > 255:
+                self.get_logger().warning(
+                    "GRAPH payload for node_id=%s is %d bytes (>255). Reduce feature_dim or pruning.",
+                    node_id,
+                    payload_bytes,
+                )
 
             self.send_message_xbee(msg, addr, node_id)
 
@@ -379,7 +428,11 @@ class GraphGenerator():
         """Load the next graph from the dataset."""
         self.current_graph_index = random.randint(self.dataset_range[0], self.dataset_range[1])
         self.data = self.dataset[self.current_graph_index]
-        self.data.x = self.data.x[:, :8] # TODO: ONLY 8 FEATURES, CHANGE -------------------------------
+        if self.feature_dim is not None:
+            self.data.x = self.data.x[:, : self.feature_dim]
+        self.get_logger().debug(
+            "Loaded graph idx=%d with feature_dim=%d", self.current_graph_index, self.data.x.shape[1]
+        )
 
         # Create graph based on positions and communication radius
         self.G = tg_utils.to_networkx(self.data, to_undirected=True)
@@ -453,7 +506,7 @@ def main(args):
             try:
                 matplotlib.use('Qt5Agg')
             except ImportError:
-                print("Warning: No interactive backend available. Install python3-tk or pyqt5.")
+                logging.getLogger("central").warning("No interactive matplotlib backend available (install python3-tk or pyqt5). Falling back to non-GUI.")
                 args.gui = False
                 matplotlib.use('Agg')
     else:
@@ -462,11 +515,12 @@ def main(args):
     # rclpy.init()
 
     graph_generator = GraphGenerator(
-        graph_mode=args.mode, 
-        gui_mode=args.gui, 
-        baud_rate=args.baud, 
+        graph_mode=args.mode,
+        gui_mode=args.gui,
+        baud_rate=args.baud,
         port=args.port,
-        config=args.config
+        config=args.config,
+        feature_dim=args.feature_dim,
     )
 
     try:
@@ -486,7 +540,7 @@ def main(args):
                 time.sleep(0.5)
 
     except KeyboardInterrupt:
-        print("Interrupted by user (Ctrl+C).")
+        logging.getLogger("central").info("Interrupted by user (Ctrl+C).")
 
     finally:
         # --- Zigbee shutdown ---
@@ -494,9 +548,9 @@ def main(args):
             if hasattr(graph_generator, "device") and graph_generator.device is not None:
                 if graph_generator.device.is_open():
                     graph_generator.device.close()
-                    print("[CENTRAL] XBee device closed.")
+                    logging.getLogger("central").info("Central XBee device closed.")
         except Exception as e:
-            print(f"[CENTRAL] Warning: failed to close XBee device: {e}")
+            logging.getLogger("central").warning("Failed to close XBee device: %s", e)
 
         # --- Plot handling ---
         # IMPORTANT: do NOT plt.close("all") if you want to show the final figure.
@@ -535,5 +589,13 @@ if __name__ == "__main__":
     args.add_argument("--port", default="/dev/ttyUSB0")
     args.add_argument("--baud", type=int, default=9600)
     args.add_argument("--config", default="config.json")
+    args.add_argument(
+        "--feature-dim",
+        type=int,
+        default=8,
+        help="Number of per-node features to send. Set to 0 or negative to send all features.",
+    )
     parsed_args = args.parse_args()
+    if parsed_args.feature_dim is not None and parsed_args.feature_dim <= 0:
+        parsed_args.feature_dim = None
     main(parsed_args)
