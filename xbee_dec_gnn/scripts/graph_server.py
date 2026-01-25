@@ -51,7 +51,8 @@ def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py
 
 class ObjectWithLogger:
     def __init__(self, logger_name: str = "xbee_dec_gnn"):
-        super().__init__(logger_name="central")
+        # Base object has no __init__ signature to forward
+        super().__init__()
         """Create/get a logger with a ColoredFormatter (stdout)."""
         formatter = ColoredFormatter(
             "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
