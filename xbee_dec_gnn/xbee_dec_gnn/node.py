@@ -229,14 +229,12 @@ class Node(ObjectWithLogger):
         ready = len(self.active_neighbors) > 0
 
         if ready:
-            self.get_logger().info(f"Active neighbors -> {self.active_neighbors}")
+            self.get_logger().debug("Neighbors: %s", self.active_neighbors)
         return ready
 
     def get_initial_features(self):
         # Compute the initial feature vector for this node (already received over XBee).
         self.value = self.data
-        self.get_logger().debug(f"Init features: {self.value}")
-        self.get_logger().debug(f"Local subgraph edges: {list(self.local_subgraph.edges())}")
         return self.value
 
     def _apply_graph_payload(self, node_id, neighbors, features):
@@ -244,7 +242,7 @@ class Node(ObjectWithLogger):
         if node_id is not None:
             self.node_id = node_id
         
-        self.get_logger().debug("_apply_graph_payload: node_id=%s neighbors=%s", self.node_id, neighbors)
+        self.get_logger().info("Graph received: id=%s neighbors=%s", self.node_id, neighbors)
         
         self.local_subgraph = nx.Graph()
         self.local_subgraph.add_node(self.node_id)
@@ -286,7 +284,7 @@ class Node(ObjectWithLogger):
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
-        self.get_logger().debug("Message passing done (mean=%.6f)", float(node_value.mean()))
+        self.get_logger().info("  Message passing complete (%.2fs)", time.perf_counter() - mp_start)
 
         return node_value
 
@@ -318,7 +316,7 @@ class Node(ObjectWithLogger):
             raise RuntimeError("Pooling did not converge.")
 
         self.stats["pooling_time"].append(time.perf_counter() - pooling_start)
-        self.get_logger().debug("Pooling done (mean=%.6f)", float(final_value.mean()))
+        self.get_logger().info("  Pooling complete (%.2fs)", time.perf_counter() - pooling_start)
         return final_value
 
     def run_prediction(self, graph_value: torch.Tensor):
@@ -339,21 +337,24 @@ class Node(ObjectWithLogger):
 
         self._send_raw(data, addr, node_id, msg.get("type"))
 
-    def _send_raw(self, data: bytes, addr, node_id, msg_type: str):
+    def _send_raw(self, data: bytes, addr, node_id, msg_type: str, silent: bool = False):
         ok = False
         for attempt in range(1, 5):
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                self.get_logger().debug("TX: %s -> %s (len=%d attempt=%d)", msg_type, node_id, len(data), attempt)
+                if not silent and attempt == 1:
+                    self.get_logger().debug("TX: %s -> node %s", msg_type, node_id)
+                elif attempt > 1:
+                    self.get_logger().debug("TX: %s -> node %s (retry %d)", msg_type, node_id, attempt)
                 break
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s len=%d)", node_id, attempt, status, len(data))
+                self.get_logger().warning("TX fail: %s (attempt %d, %s)", msg_type, attempt, status)
                 time.sleep(0.1)
 
         if not ok:
-            self.get_logger().error("TX: giving up %s to %s (addr=%s)", msg_type, node_id, addr)
+            self.get_logger().error("TX gave up: %s to node %s", msg_type, node_id)
 
         time.sleep(0.05)
 
@@ -367,12 +368,12 @@ class Node(ObjectWithLogger):
         chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
         total = len(chunks)
 
-        self.get_logger().debug("TX: fragmenting %s (%d bytes -> %d chunks)", msg_type, len(data), total)
+        self.get_logger().debug("TX: %s -> node %s (%d bytes, %d fragments)", msg_type, node_id, len(data), total)
 
         for idx, chunk in enumerate(chunks):
             frag_msg = {"_fid": msg_id, "_fi": idx, "_fn": total, "_fd": chunk}
             frag_data = json.dumps(frag_msg).encode("utf-8")
-            self._send_raw(frag_data, addr, node_id, f"{msg_type}[{idx+1}/{total}]")
+            self._send_raw(frag_data, addr, node_id, f"{msg_type}[{idx+1}/{total}]", silent=True)
 
     def _handle_fragment(self, msg: dict):
         """Buffer fragment and return reassembled message when complete, else None."""
@@ -390,11 +391,10 @@ class Node(ObjectWithLogger):
 
             # Check if all fragments received
             if len(self._frag_buffer[msg_id]) < total:
-                self.get_logger().debug("RX: fragment %d/%d for msg %s", frag_idx + 1, total, msg_id)
-                return None
+                return None  # Still waiting for more fragments
 
             # Reassemble
-            self.get_logger().debug("RX: reassembling %d fragments for msg %s", total, msg_id)
+            self.get_logger().debug("RX: reassembled %d fragments", total)
             ordered = [self._frag_buffer[msg_id][i] for i in range(total)]
             encoded = "".join(ordered)
             raw = base64.b64decode(encoded)
@@ -489,7 +489,6 @@ class Node(ObjectWithLogger):
         # self.received_pooling[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
 
-        self.get_logger().debug(f"Received pooling message from {msg['sender']} at iteration {msg['i']}")
         sources = msg.get("sources", [])
         if len(sources) > 0:
             # Reconstruct dict of tensors from flattened data and shape
@@ -508,7 +507,8 @@ class Node(ObjectWithLogger):
             return
 
         self.round_counter += 1
-        self.get_logger().info("Round %d started", self.round_counter)
+        self.get_logger().info("─" * 40)
+        self.get_logger().info("ROUND %d", self.round_counter)
         round_start = time.perf_counter()
 
         initial_features = self.get_initial_features()
@@ -520,11 +520,12 @@ class Node(ObjectWithLogger):
             graph_value = self.run_prediction(graph_value)
             graph_value = graph_value.item()
         except TimeoutError as e:
-            self.get_logger().warning("Timeout: %s (canceling round %d)", e, self.round_counter)
+            self.get_logger().warning("Timeout: %s", e)
             return
 
-        self.stats["round_time"].append(time.perf_counter() - round_start)
-        self.get_logger().info("Round %d complete: graph_value=%.3f", self.round_counter, graph_value)
+        elapsed = time.perf_counter() - round_start
+        self.stats["round_time"].append(elapsed)
+        self.get_logger().info("ROUND %d DONE: value=%.4f (%.2fs)", self.round_counter, graph_value, elapsed)
 
         # TODO: Adatpt for Xbee
         # led_color = LEDMatrix.from_colormap(graph_value / self.num_nodes, color_space="hsv", cmap_name="jet")
