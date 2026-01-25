@@ -14,7 +14,6 @@ from colorlog import ColoredFormatter
 from prettytable import PrettyTable
 
 from xbee_dec_gnn.decentralized_gnns.dec_gnn import DecentralizedGNN
-from xbee_dec_gnn.gnn_models.algebraic_gnn_wrapper import GNNWrapper
 from xbee_dec_gnn.utils.led_matrix import LEDMatrix
 
 
@@ -86,14 +85,8 @@ class Node(ObjectWithLogger):
         self.gnn_model_path = default_model_path
 
         # # TODO: Load the GNN model. # DOC: Change this to customize how the model is loaded.
-        dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
-        model = self._load_wrapper_with_fallback(self.gnn_model_path)
-        self.decentralized_model = DecentralizedGNN(
-            gnn_model=model.gnn,
-            pooling=model.pool,
-            predictor_model=model.predictor,
-            **dist_model_kwargs,
-        )
+        # dist_model_kwargs = dict(pooling_protocol="consensus", consensus_sigma=1 / self.num_nodes)
+        # self.decentralized_model = DecentralizedGNN.from_gnn_wrapper(self.gnn_model_path, **dist_model_kwargs)
 
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
@@ -102,34 +95,6 @@ class Node(ObjectWithLogger):
         self.bcast_lock = threading.Event()
         self.init_id_lock = threading.Event()
         self.graph_lock = threading.Event()
-
-    def _load_wrapper_with_fallback(self, path: str):
-        map_location = torch.device("cpu") if not torch.cuda.is_available() else None
-        model_dict = torch.load(path, map_location=map_location)
-
-        cfg = dict(model_dict.get("config", {}))
-        if "gnn_layers" not in cfg:
-            keys = model_dict.get("model", {}).keys()
-            conv_ids = []
-            for k in keys:
-                parts = k.split(".")
-                if len(parts) >= 3 and parts[0] == "gnn" and parts[1] in {"convs", "layers"}:
-                    try:
-                        conv_ids.append(int(parts[2]))
-                    except ValueError:
-                        continue
-            inferred = (max(conv_ids) + 1) if conv_ids else cfg.get("num_layers") or cfg.get("layers") or 2
-            cfg["gnn_layers"] = inferred
-
-        model = GNNWrapper(
-            architecture=cfg["architecture"],
-            in_channels=cfg["in_channels"],
-            hidden_channels=cfg["hidden_channels"],
-            gnn_layers=cfg["gnn_layers"],
-            **{k: v for k, v in cfg.items() if k not in {"architecture", "in_channels", "hidden_channels", "gnn_layers"}},
-        )
-        model.load_state_dict(model_dict["model"])
-        return model
 
     def run(self):
         # Main loop of the node.
