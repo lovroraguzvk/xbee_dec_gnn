@@ -132,8 +132,8 @@ class Node(ObjectWithLogger):
             self.bcast_lock.set()
 
         if msg.get("type") == "REGISTER_ACK":
+            self.id_to_addr = {int(k): v for k, v in msg["id_to_addr"].items()}
             self.node_id = msg.get("id")
-            self.id_to_addr = msg.get("id_to_addr")
 
             new_msg = {
                 "type" : "ID_CONFIRM",
