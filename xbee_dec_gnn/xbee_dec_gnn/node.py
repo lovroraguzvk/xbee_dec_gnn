@@ -92,6 +92,9 @@ class Node(ObjectWithLogger):
         # Initialize the LED matrix if available.
         self.led = LEDMatrix()
 
+        self.port = port
+        self.baud = baud
+
         self.device = ZigBeeDevice(port, baud)
         self.bcast_lock = threading.Event()
         self.init_id_lock = threading.Event()
@@ -180,7 +183,7 @@ class Node(ObjectWithLogger):
         self.device.open()
         self.device.add_data_received_callback(self.receive_message_xbee)
 
-        self.get_logger().info(f"Port: {self.device.get_serial_port()} @ {self.device.get_baud_rate()}")
+        self.get_logger().info(f"Port: {self.port} @ {self.baud}")
         self.get_logger().info(f"XBee addr64: {self.device.get_64bit_addr()}")
 
         self.get_logger().info("Waiting for DISCOVERY from central...")
