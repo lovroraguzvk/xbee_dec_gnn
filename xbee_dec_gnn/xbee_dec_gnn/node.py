@@ -119,7 +119,7 @@ class Node(ObjectWithLogger):
             self.central_addr = msg.get("addr")
 
             new_msg = {
-                "type" : "INIT",
+                "type" : "NODE_REGISTER",
                 "hostname" : self.hostname
             }
 
