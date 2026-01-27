@@ -393,9 +393,9 @@ class Node(ObjectWithLogger):
                     self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                     ok = True
                     if attempt == 1:
-                        self.get_logger().debug("TX: %s -> node %s", "MP", node_id)
+                        self.get_logger().debug("TX: %s -> node %s", "MP at iteration " + str(layer), node_id)
                     else:
-                        self.get_logger().debug("TX: %s -> node %s (retry %d)", "MP", node_id, attempt)
+                        self.get_logger().debug("TX: %s -> node %s (retry %d)", "MP at iteration " + str(layer), node_id, attempt)
                     break
                 except TransmitException as e:
                     status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
