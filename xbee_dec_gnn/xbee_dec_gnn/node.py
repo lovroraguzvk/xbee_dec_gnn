@@ -27,8 +27,7 @@ class ObjectWithLogger:
     def __init__(self):
         """Return a logger with a default ColoredFormatter."""
         formatter = ColoredFormatter(
-            "%(log_color)s%(levelname)-5s%(reset)s %(cyan)s%(asctime)s%(reset)s [%(blue)s%(name)s%(reset)s] %(message)s",
-            datefmt="%H:%M:%S",
+            "%(log_color)s%(levelname)-8s%(reset)s %(message)s",
             reset=True,
             log_colors={
                 "DEBUG": "cyan",
@@ -64,7 +63,7 @@ class Node(ObjectWithLogger):
         self.id_to_addr = None
         self.data = None
 
-        self.get_logger().info("Node online: name=%s hostname=%s", self.node_name, self.hostname)
+        self.get_logger().info("Node online: hostname=%s", self.hostname)
 
         self.value = torch.Tensor()  # The current representation of the node.
         self.output = torch.Tensor()  # The interpretable output of the GNN after each layer.
@@ -407,6 +406,8 @@ class Node(ObjectWithLogger):
         # TODO: Adapt for Xbee
 
         # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
+
+        self.get_logger().debug("RX: MP received from node %s at iteration %s", msg.get("id"), msg.get("i"))
 
         tensor_data = unpack_tensor(msg.get("x"), msg.get("s"))
 
