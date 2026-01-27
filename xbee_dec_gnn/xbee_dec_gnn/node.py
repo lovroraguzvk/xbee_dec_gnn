@@ -267,6 +267,7 @@ class Node(ObjectWithLogger):
 
             # Wait until values are received from all neighbors.
             wait_time_start = time.time()
+            key = (self.round_counter, layer)
             while len(self.received_mp[self.round_counter][layer]) < len(self.active_neighbors):
                 if time.time() - wait_time_start > 30:  # 30 seconds timeout
                     raise TimeoutError("Timeout waiting for message passing messages.")
@@ -275,19 +276,17 @@ class Node(ObjectWithLogger):
 
 
             # Update the node's representation using the GNN layer.
-            neighbor_values = list(self.received_mp[self.round_counter][layer].values())
+            neighbor_values = list(self.received_mp[key].values())
             inference_start = time.perf_counter()
             node_value = self.decentralized_model.update_gnn(layer, node_value, neighbor_values)
             inference_time += time.perf_counter() - inference_start
-            del self.received_mp[self.round_counter][layer]
+            del self.received_mp[key]
             
             self.get_logger().debug("MP layer %d complete", layer)
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
         self.get_logger().info("  Message passing complete (%.2fs)", time.perf_counter() - mp_start)
-
-        del self.received_mp[self.round_counter]
 
         return node_value
 
@@ -416,11 +415,17 @@ class Node(ObjectWithLogger):
 
         # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
         
-        self.get_logger().debug("RX: MP received from node %s at iteration %s", msg.get("id"), msg.get("i"))
+        r = msg["r"]
+        layer = msg["i"]
+        sender = msg["id"]
 
-        tensor_data = unpack_tensor(msg.get("x"), msg.get("s"))
+        tensor_data = unpack_tensor(msg["x"], msg["s"])
+        self.received_mp[(r, layer)][sender] = tensor_data
 
-        self.received_mp[self.round_counter][msg.get("i")][msg.get("id")] = tensor_data
+        self.get_logger().debug(
+            "RX: MP stored from node %s (r=%s, layer=%s) now %d/%d",
+            sender, r, layer, len(self.received_mp[(r, layer)]), len(self.active_neighbors)
+        )
 
     def send_pooling(self, iteration: int, value: dict[str, torch.Tensor] | torch.Tensor):
         # msg = GNNmessage()
