@@ -97,7 +97,6 @@ class Node(ObjectWithLogger):
         self.baud = baud
 
         self.central_addr = None
-        self.curr_layer = 0
 
         self.device = ZigBeeDevice(port, baud)
         self.bcast_lock = threading.Event()
@@ -264,30 +263,31 @@ class Node(ObjectWithLogger):
         node_value = initial_features
         for layer in range(self.decentralized_model.num_layers):
             # Send the current node representation to neighbors.
-            self.curr_layer = layer
+            self.send_message_passing(layer, node_value)
 
             # Wait until values are received from all neighbors.
             wait_time_start = time.time()
-            while len(self.received_mp[layer]) < len(self.active_neighbors):
+            while len(self.received_mp[self.round_counter][layer]) < len(self.active_neighbors):
                 if time.time() - wait_time_start > 30:  # 30 seconds timeout
                     raise TimeoutError("Timeout waiting for message passing messages.")
-                self.get_logger().debug("Waiting for MP layer %d: %d/%d received", layer, len(self.received_mp[layer]), len(self.active_neighbors))
-                self.send_message_passing(layer, node_value)
-                time.sleep(0.5)
+                # self.get_logger().debug("Waiting for MP layer %d: %d/%d received", layer, len(self.received_mp[layer]), len(self.active_neighbors))
+                time.sleep(0.1)
 
 
             # Update the node's representation using the GNN layer.
-            neighbor_values = list(self.received_mp[layer].values())
+            neighbor_values = list(self.received_mp[self.round_counter][layer].values())
             inference_start = time.perf_counter()
             node_value = self.decentralized_model.update_gnn(layer, node_value, neighbor_values)
             inference_time += time.perf_counter() - inference_start
-            del self.received_mp[layer]
+            del self.received_mp[self.round_counter][layer]
             
             self.get_logger().debug("MP layer %d complete", layer)
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
         self.get_logger().info("  Message passing complete (%.2fs)", time.perf_counter() - mp_start)
+
+        del self.received_mp[self.round_counter]
 
         return node_value
 
@@ -415,19 +415,12 @@ class Node(ObjectWithLogger):
         # TODO: Adapt for Xbee
 
         # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
-
-        if self.curr_layer != msg.get("i"):
-            self.get_logger().warning("RX: MP layer mismatch: expected %s but got %s", self.curr_layer, msg.get("i"))
-            return
-        elif self.round_counter != msg.get("r"):
-            self.get_logger().warning("RX: MP round mismatch: expected %s but got %s", self.round_counter, msg.get("r"))
-            return
         
         self.get_logger().debug("RX: MP received from node %s at iteration %s", msg.get("id"), msg.get("i"))
 
         tensor_data = unpack_tensor(msg.get("x"), msg.get("s"))
 
-        self.received_mp[msg.get("i")][msg.get("id")] = tensor_data
+        self.received_mp[self.round_counter][msg.get("i")][msg.get("id")] = tensor_data
 
     def send_pooling(self, iteration: int, value: dict[str, torch.Tensor] | torch.Tensor):
         # msg = GNNmessage()
@@ -461,8 +454,7 @@ class Node(ObjectWithLogger):
             data = torch.stack(list(value.values()), dim=0)
             msg["x"], msg["s"] = pack_tensor(data)
         else:
-            msg["x"] = value.flatten().tolist()  # Flatten tensor to 1D list
-            msg["s"] = list(value.shape)  # Store original shape
+            msg["x"], msg["s"] = pack_tensor(value)
 
         data = encode_msg(msg)
         for neighbor in self.active_neighbors:
