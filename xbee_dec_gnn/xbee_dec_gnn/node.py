@@ -265,7 +265,6 @@ class Node(ObjectWithLogger):
         for layer in range(self.decentralized_model.num_layers):
             # Send the current node representation to neighbors.
             self.curr_layer = layer
-            self.send_message_passing(layer, node_value)
 
             # Wait until values are received from all neighbors.
             wait_time_start = time.time()
@@ -273,6 +272,7 @@ class Node(ObjectWithLogger):
                 if time.time() - wait_time_start > 30:  # 30 seconds timeout
                     raise TimeoutError("Timeout waiting for message passing messages.")
                 self.get_logger().debug("Waiting for MP layer %d: %d/%d received", layer, len(self.received_mp[layer]), len(self.active_neighbors))
+                self.send_message_passing(layer, node_value)
                 time.sleep(0.5)
 
 
@@ -282,7 +282,6 @@ class Node(ObjectWithLogger):
             node_value = self.decentralized_model.update_gnn(layer, node_value, neighbor_values)
             inference_time += time.perf_counter() - inference_start
             del self.received_mp[layer]
-
             
             self.get_logger().debug("MP layer %d complete", layer)
 
