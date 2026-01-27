@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import random
-import time, logging, json, threading, socket, argparse
+import time, logging, json, threading, socket, argparse, torch, random
 from collections import defaultdict
 from typing import Dict, Any
 from digi.xbee.devices import ZigBeeDevice
@@ -10,8 +9,6 @@ from digi.xbee.exception import TransmitException
 
 import networkx as nx
 import numpy as np
-from pydash import random
-import torch
 from colorlog import ColoredFormatter
 from prettytable import PrettyTable
 
