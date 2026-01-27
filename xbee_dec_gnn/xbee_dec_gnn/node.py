@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import time, logging, json, threading, socket, argparse, base64, uuid
+import time, logging, json, threading, socket, argparse
 from collections import defaultdict
-from typing import Dict, Any # dodano
-from digi.xbee.devices import ZigBeeDevice # dodano
-from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress # dodano
-from digi.xbee.exception import TransmitException # dodano
+from typing import Dict, Any
+from digi.xbee.devices import ZigBeeDevice
+from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress
+from digi.xbee.exception import TransmitException
 
 import networkx as nx
 import numpy as np
@@ -15,6 +15,8 @@ from prettytable import PrettyTable
 
 from xbee_dec_gnn.decentralized_gnns.dec_gnn import DecentralizedGNN
 from xbee_dec_gnn.utils.led_matrix import LEDMatrix
+
+from encoder import encode_msg, decode_msg, pack_tensor, unpack_tensor
 
 
 def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py or something
@@ -100,12 +102,6 @@ class Node(ObjectWithLogger):
         self.init_id_lock = threading.Event()
         self.graph_lock = threading.Event()
 
-        # Fragmentation support
-        self.MAX_PAYLOAD = 200  # Leave room for fragment header within 255 byte limit
-        self._frag_buffer: Dict[str, Dict[int, bytes]] = {}  # msg_id -> {frag_idx -> data}
-        self._frag_meta: Dict[str, int] = {}  # msg_id -> total_frags
-        self._frag_lock = threading.Lock()
-
     def run(self):
         # Main loop of the node.
         while True:
@@ -124,13 +120,6 @@ class Node(ObjectWithLogger):
         except Exception:
             self.get_logger().exception("RX decode failed (non-JSON XBee payload)")
             return
-
-        # Handle fragmented messages
-        if "_fid" in msg:
-            reassembled = self._handle_fragment(msg)
-            if reassembled is None:
-                return  # Still waiting for more fragments
-            msg = reassembled
 
         if msg.get("type") == "DISCOVERY":
             self.central_addr = msg.get("addr")
@@ -330,22 +319,15 @@ class Node(ObjectWithLogger):
         if isinstance(addr, str):
             addr = XBee64BitAddress.from_hex_string(addr)
 
-        # Fragment if payload exceeds limit
-        if len(data) > self.MAX_PAYLOAD:
-            self._send_fragmented(data, addr, node_id, msg.get("type"))
-            return
-
-        self._send_raw(data, addr, node_id, msg.get("type"))
-
-    def _send_raw(self, data: bytes, addr, node_id, msg_type: str, silent: bool = False):
+        msg_type = msg.get("type")
         ok = False
         for attempt in range(1, 5):
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                 ok = True
-                if not silent and attempt == 1:
+                if attempt == 1:
                     self.get_logger().debug("TX: %s -> node %s", msg_type, node_id)
-                elif attempt > 1:
+                else:
                     self.get_logger().debug("TX: %s -> node %s (retry %d)", msg_type, node_id, attempt)
                 break
             except TransmitException as e:
@@ -358,53 +340,6 @@ class Node(ObjectWithLogger):
 
         time.sleep(0.05)
 
-    def _send_fragmented(self, data: bytes, addr, node_id, msg_type: str):
-        """Split large payload into fragments and send each."""
-        msg_id = uuid.uuid4().hex[:8]  # Short unique ID
-        encoded = base64.b64encode(data).decode("ascii")
-
-        # Calculate chunk size (leave room for fragment JSON wrapper)
-        chunk_size = self.MAX_PAYLOAD - 60  # Reserve space for {"_fid":"...","_fi":X,"_fn":X,"_fd":""}
-        chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
-        total = len(chunks)
-
-        self.get_logger().debug("TX: %s -> node %s (%d bytes, %d fragments)", msg_type, node_id, len(data), total)
-
-        for idx, chunk in enumerate(chunks):
-            frag_msg = {"_fid": msg_id, "_fi": idx, "_fn": total, "_fd": chunk}
-            frag_data = json.dumps(frag_msg).encode("utf-8")
-            self._send_raw(frag_data, addr, node_id, f"{msg_type}[{idx+1}/{total}]", silent=True)
-
-    def _handle_fragment(self, msg: dict):
-        """Buffer fragment and return reassembled message when complete, else None."""
-        msg_id = msg["_fid"]
-        frag_idx = msg["_fi"]
-        total = msg["_fn"]
-        chunk = msg["_fd"]
-
-        with self._frag_lock:
-            if msg_id not in self._frag_buffer:
-                self._frag_buffer[msg_id] = {}
-                self._frag_meta[msg_id] = total
-
-            self._frag_buffer[msg_id][frag_idx] = chunk
-
-            # Check if all fragments received
-            if len(self._frag_buffer[msg_id]) < total:
-                return None  # Still waiting for more fragments
-
-            # Reassemble
-            self.get_logger().debug("RX: reassembled %d fragments", total)
-            ordered = [self._frag_buffer[msg_id][i] for i in range(total)]
-            encoded = "".join(ordered)
-            raw = base64.b64decode(encoded)
-
-            # Cleanup
-            del self._frag_buffer[msg_id]
-            del self._frag_meta[msg_id]
-
-        return json.loads(raw.decode("utf-8"))
-
     def send_message_passing(self, layer: int, value: torch.Tensor):
         # msg = GNNmessage()
         # msg.sender = self.node_name
@@ -416,16 +351,45 @@ class Node(ObjectWithLogger):
         #     self.get_logger().debug(f"Sent message to {neighbor} at layer {layer}")
         # TODO: Adapt for Xbee
 
+        blob, shape = pack_tensor(value)
         msg = {
-            "type": "MP",
-            "sender" : self.node_name,
-            "iter" : layer,
-            "data" : value.flatten().tolist(),
-            "shape" : list(value.shape)
+            "t": "MP",
+            "id" : self.node_id,
+            "i" : layer,
+            "x" : blob,
+            "s" : shape
         }
 
+        data = encode_msg(msg)
+
         for neighbor in self.active_neighbors:
-            self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
+            node_id = neighbor
+            addr = self.id_to_addr[neighbor]
+
+            if isinstance(addr, str):
+                addr = XBee64BitAddress.from_hex_string(addr)
+
+            ok = False
+            for attempt in range(1, 5):
+                try:
+                    self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                    ok = True
+                    if attempt == 1:
+                        self.get_logger().debug("TX: %s -> node %s", "MP", node_id)
+                    else:
+                        self.get_logger().debug("TX: %s -> node %s (retry %d)", "MP", node_id, attempt)
+                    break
+                except TransmitException as e:
+                    status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
+                    self.get_logger().warning("TX fail: %s (attempt %d, %s)", "MP", attempt, status)
+                    time.sleep(0.1)
+
+            if not ok:
+                self.get_logger().error("TX gave up: %s to node %s", "MP", node_id)
+            time.sleep(0.05)
+
+        # for neighbor in self.active_neighbors:
+        #     self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
 
     def receive_message_passing(self, msg):
         # Reconstruct tensor from flattened data and shape
@@ -433,8 +397,11 @@ class Node(ObjectWithLogger):
         # self.received_mp[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
 
-        tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
-        self.received_mp[msg.get("iter")][msg.get("sender")] = tensor_data
+        # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
+
+        tensor_data = unpack_tensor(msg.get("x"), msg.get("s"))
+
+        self.received_mp[msg.get("i")][msg.get("id")] = tensor_data
 
     def send_pooling(self, iteration: int, value: dict[str, torch.Tensor] | torch.Tensor):
         # msg = GNNmessage()
@@ -457,25 +424,46 @@ class Node(ObjectWithLogger):
 
 
         msg = {
-            "type": "pooling",
-            "sender" : self.node_name,
+            "t": "pooling",
+            "id" : self.node_id,
             "i" : iteration
         }
 
         if isinstance(value, dict):  # This enables pooling by flooding
-            msg["sources"] = list(value.keys())
+            msg["ss"] = list(value.keys()) # sources
 
             data = torch.stack(list(value.values()), dim=0)
-            msg["data"] = data.flatten().tolist()  # Flatten tensor to 1D list
-            msg["shape"] = list(data.shape)  # Store original shape
+            msg["x"], msg["s"] = pack_tensor(data)
         else:
-            msg["data"] = value.flatten().tolist()  # Flatten tensor to 1D list
-            msg["shape"] = list(value.shape)  # Store original shape
+            msg["x"] = value.flatten().tolist()  # Flatten tensor to 1D list
+            msg["s"] = list(value.shape)  # Store original shape
 
+        data = encode_msg(msg)
         for neighbor in self.active_neighbors:
-            self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
+            node_id = neighbor
+            addr = self.id_to_addr[neighbor]
 
-        
+            if isinstance(addr, str):
+                addr = XBee64BitAddress.from_hex_string(addr)
+
+            ok = False
+            for attempt in range(1, 5):
+                try:
+                    self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                    ok = True
+                    if attempt == 1:
+                        self.get_logger().debug("TX: %s -> node %s", "pooling", node_id)
+                    else:
+                        self.get_logger().debug("TX: %s -> node %s (retry %d)", "pooling", node_id, attempt)
+                    break
+                except TransmitException as e:
+                    status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
+                    self.get_logger().warning("TX fail: %s (attempt %d, %s)", "pooling", attempt, status)
+                    time.sleep(0.1)
+
+            if not ok:
+                self.get_logger().error("TX gave up: %s to node %s", "pooling", node_id)
+            time.sleep(0.05)
 
     def receive_pooling(self, msg):
         # self.get_logger().debug(f"Received pooling message from {msg.sender} at iteration {msg.iteration}")
@@ -489,15 +477,15 @@ class Node(ObjectWithLogger):
         # self.received_pooling[msg.iteration][msg.sender] = tensor_data
         # TODO: Adapt for Xbee
 
-        sources = msg.get("sources", [])
+        sources = msg.get("ss", [])
         if len(sources) > 0:
             # Reconstruct dict of tensors from flattened data and shape
-            data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
+            data = torch.tensor(msg["x"]).reshape(tuple(msg["s"]))
             tensor_data = {source: data[i] for i, source in enumerate(sources)}
         else:
             # Reconstruct tensor from flattened data and shape
-            tensor_data = torch.tensor(msg["data"]).reshape(tuple(msg["shape"]))
-        self.received_pooling[msg["i"]][msg["sender"]] = tensor_data
+            tensor_data = torch.tensor(msg["x"]).reshape(tuple(msg["s"]))
+        self.received_pooling[msg["i"]][msg["id"]] = tensor_data
 
     def compute_gnn(self):
         ready = self.get_neighbors()

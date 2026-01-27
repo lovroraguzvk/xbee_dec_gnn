@@ -210,10 +210,10 @@ class GraphGenerator(ObjectWithLogger):
             # --- broadcast INIT ---
             try:
                 self.device.send_data_64_16(BCAST_64, BCAST_16, data)
-                self.get_logger().debug("TX: BCAST broadcast (central_mac=%s)", my_addr)
+                self.get_logger().debug("TX: DISCOVERY broadcast (central_mac=%s)", my_addr)
             except TransmitException as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
-                self.get_logger().warning("TX: BCAST broadcast failed (status=%s)", status)
+                self.get_logger().warning("TX: DISCOVERY broadcast failed (status=%s)", status)
 
             # --- wait but wake early if ACKs complete ---
             self.final_reg_event.wait(timeout=interval_s)
