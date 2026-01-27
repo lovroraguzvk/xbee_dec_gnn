@@ -48,9 +48,7 @@ root: ~/other_ws/xbee_dec_gnn
 log_level: <%= log_level %>
 
 windows:
-  - nodes:
-      layout: even-horizontal
-      synchronize: after
+  - node 0:
       panes:
         - |
           <%- if args[0] == "mixed" or args[0] == "remote" %>
@@ -58,24 +56,32 @@ windows:
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
+  - node 1:
+      panes:
         - |
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.196 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
+  - node 2:
+      panes:
         - |
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.229 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
+  - node 3:
+      panes:
         - |
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.158 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
+  - node 4:
+      panes:
         - |
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.222 'docker start -i xbee_gnn_cont'
