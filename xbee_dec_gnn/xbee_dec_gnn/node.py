@@ -117,11 +117,15 @@ class Node(ObjectWithLogger):
     #     self.local_subgraph: nx.Graph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
 
     def receive_message_xbee(self, xbee_message):
+        #check if message is json or pickled
+
+
+
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
-            self.get_logger().exception("RX decode failed (non-JSON XBee payload)")
-            return
+            self.get_logger().error("TX fail: Message isnt JSON, using pickle decoder")
+            msg = decode_msg(xbee_message.data)
 
         if msg.get("type") == "DISCOVERY":
             self.central_addr = msg.get("addr")
@@ -180,9 +184,9 @@ class Node(ObjectWithLogger):
             return
 
 
-        if msg.get("type") in ("MP", "mp"):
+        if msg.get("t") in "MP":
             self.receive_message_passing(msg)
-        if msg.get("type") == "pooling":
+        if msg.get("t") == "pooling":
             self.receive_pooling(msg)
 
     def start(self):
