@@ -187,7 +187,7 @@ class Node(ObjectWithLogger):
             return
 
 
-        if msg.get("t") in "MP":
+        if msg.get("t") == "MP":
             self.receive_message_passing(msg)
             return
         if msg.get("t") == "pooling":
