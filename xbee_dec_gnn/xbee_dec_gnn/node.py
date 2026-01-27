@@ -268,7 +268,7 @@ class Node(ObjectWithLogger):
             # Wait until values are received from all neighbors.
             wait_time_start = time.time()
             while len(self.received_mp[layer]) < len(self.active_neighbors):
-                if time.time() - wait_time_start > 2.0:  # 2 seconds timeout
+                if time.time() - wait_time_start > 10:  # 10 seconds timeout
                     raise TimeoutError("Timeout waiting for message passing messages.")
                 time.sleep(0.1)
 
