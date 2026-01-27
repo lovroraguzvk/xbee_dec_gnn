@@ -388,7 +388,7 @@ class Node(ObjectWithLogger):
             ok = False
             for attempt in range(1, 5):
                 try:
-                    self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                    self.device.send_data_async_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                     ok = True
                     if attempt == 1:
                         self.get_logger().debug("TX: %s -> node %s", "MP at iteration " + str(layer), node_id)
@@ -472,7 +472,7 @@ class Node(ObjectWithLogger):
             ok = False
             for attempt in range(1, 5):
                 try:
-                    self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
+                    self.device.send_data_async_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
                     ok = True
                     if attempt == 1:
                         self.get_logger().debug("TX: %s -> node %s", "pooling", node_id)
