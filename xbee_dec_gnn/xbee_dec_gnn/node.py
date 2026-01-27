@@ -16,7 +16,7 @@ from prettytable import PrettyTable
 from xbee_dec_gnn.decentralized_gnns.dec_gnn import DecentralizedGNN
 from xbee_dec_gnn.utils.led_matrix import LEDMatrix
 
-from encoder import encode_msg, decode_msg, pack_tensor, unpack_tensor
+from xbee_dec_gnn.encoder import encode_msg, decode_msg, pack_tensor, unpack_tensor
 
 
 def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py or something
