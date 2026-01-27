@@ -25,9 +25,9 @@ def load_config(path: str) -> Dict[str, Any]:    # dodano TODO: move to utils.py
 
 class ObjectWithLogger:
     def __init__(self):
-        """Return a logger with a default ColoredFormatter."""
         formatter = ColoredFormatter(
-            "%(log_color)s%(levelname)-8s%(reset)s %(message)s",
+            "%(log_color)s%(asctime)s %(levelname)-8s%(reset)s %(message)s",
+            datefmt="%M:%S.%f",
             reset=True,
             log_colors={
                 "DEBUG": "cyan",
@@ -43,11 +43,13 @@ class ObjectWithLogger:
             handler = logging.StreamHandler()
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
+
         self.logger.setLevel(logging.DEBUG)
         self.logger.propagate = False
 
     def get_logger(self):
         return self.logger
+
 
 
 class Node(ObjectWithLogger):
