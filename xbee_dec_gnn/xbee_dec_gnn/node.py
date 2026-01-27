@@ -97,6 +97,8 @@ class Node(ObjectWithLogger):
         self.port = port
         self.baud = baud
 
+        self.central_addr = None
+
         self.device = ZigBeeDevice(port, baud)
         self.bcast_lock = threading.Event()
         self.init_id_lock = threading.Event()
