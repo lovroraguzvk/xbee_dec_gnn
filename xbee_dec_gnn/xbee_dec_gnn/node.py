@@ -105,7 +105,9 @@ class Node(ObjectWithLogger):
 
     def run(self):
         # Main loop of the node.
+        time.sleep(5)
         while True:
+            time.sleep(1)
             self.compute_gnn()
 
     # def graph_cb(self, msg):
