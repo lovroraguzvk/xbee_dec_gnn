@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import random
 import time, logging, json, threading, socket, argparse
 from collections import defaultdict
 from typing import Dict, Any
@@ -9,6 +10,7 @@ from digi.xbee.exception import TransmitException
 
 import networkx as nx
 import numpy as np
+from pydash import random
 import torch
 from colorlog import ColoredFormatter
 from prettytable import PrettyTable
@@ -383,6 +385,8 @@ class Node(ObjectWithLogger):
         data = encode_msg(msg)
 
         for neighbor in self.active_neighbors:
+            time.sleep(random.uniform(0.01, 0.06))
+
             node_id = neighbor
             addr = self.id_to_addr[neighbor]
 
