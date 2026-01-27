@@ -124,7 +124,6 @@ class Node(ObjectWithLogger):
         try:
             msg = json.loads(xbee_message.data.decode("utf-8"))
         except Exception:
-            self.get_logger().error("TX fail: Message isnt JSON, using pickle decoder")
             msg = decode_msg(xbee_message.data)
 
         if msg.get("type") == "DISCOVERY":
