@@ -270,7 +270,8 @@ class Node(ObjectWithLogger):
             while len(self.received_mp[layer]) < len(self.active_neighbors):
                 if time.time() - wait_time_start > 30:  # 30 seconds timeout
                     raise TimeoutError("Timeout waiting for message passing messages.")
-                time.sleep(0.1)
+                self.get_logger().debug("Waiting for MP layer %d: %d/%d received", layer, len(self.received_mp[layer]), len(self.active_neighbors))
+                time.sleep(0.5)
 
             # Update the node's representation using the GNN layer.
             neighbor_values = list(self.received_mp[layer].values())
