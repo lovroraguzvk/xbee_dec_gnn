@@ -97,6 +97,7 @@ class Node(ObjectWithLogger):
         self.baud = baud
 
         self.central_addr = None
+        self.curr_layer = 0
 
         self.device = ZigBeeDevice(port, baud)
         self.bcast_lock = threading.Event()
@@ -263,6 +264,7 @@ class Node(ObjectWithLogger):
         node_value = initial_features
         for layer in range(self.decentralized_model.num_layers):
             # Send the current node representation to neighbors.
+            self.curr_layer = layer
             self.send_message_passing(layer, node_value)
 
             # Wait until values are received from all neighbors.
@@ -371,6 +373,7 @@ class Node(ObjectWithLogger):
             "t": "MP",
             "id" : self.node_id,
             "i" : layer,
+            "r" : self.round_counter,
             "x" : blob,
             "s" : shape
         }
@@ -414,6 +417,13 @@ class Node(ObjectWithLogger):
 
         # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
 
+        if self.curr_layer != msg.get("i"):
+            self.get_logger().warning("RX: MP layer mismatch: expected %s but got %s", self.curr_layer, msg.get("i"))
+            return
+        elif self.round_counter != msg.get("r"):
+            self.get_logger().warning("RX: MP round mismatch: expected %s but got %s", self.round_counter, msg.get("r"))
+            return
+        
         self.get_logger().debug("RX: MP received from node %s at iteration %s", msg.get("id"), msg.get("i"))
 
         tensor_data = unpack_tensor(msg.get("x"), msg.get("s"))
