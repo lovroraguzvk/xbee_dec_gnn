@@ -138,6 +138,7 @@ class Node(ObjectWithLogger):
             self.send_message_xbee(new_msg, msg.get("addr"), "CENTRAL")
 
             self.bcast_lock.set()
+            return
 
         if msg.get("type") == "REGISTER_ACK":
             self.id_to_addr = {int(k): v for k, v in msg["id_to_addr"].items()}
@@ -153,6 +154,7 @@ class Node(ObjectWithLogger):
             self.node_name = self.node_prefix + str(self.node_id)
 
             self.init_id_lock.set()
+            return
 
         if msg.get("type") == "GRAPH":
             # Legacy full-graph payload (graph6 + full feature matrix)
@@ -186,8 +188,10 @@ class Node(ObjectWithLogger):
 
         if msg.get("t") in "MP":
             self.receive_message_passing(msg)
+            return
         if msg.get("t") == "pooling":
             self.receive_pooling(msg)
+            return
 
     def start(self):
         self.device.open()
