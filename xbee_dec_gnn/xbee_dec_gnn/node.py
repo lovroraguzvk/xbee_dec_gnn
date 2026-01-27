@@ -273,12 +273,16 @@ class Node(ObjectWithLogger):
                 self.get_logger().debug("Waiting for MP layer %d: %d/%d received", layer, len(self.received_mp[layer]), len(self.active_neighbors))
                 time.sleep(0.5)
 
+
             # Update the node's representation using the GNN layer.
             neighbor_values = list(self.received_mp[layer].values())
             inference_start = time.perf_counter()
             node_value = self.decentralized_model.update_gnn(layer, node_value, neighbor_values)
             inference_time += time.perf_counter() - inference_start
             del self.received_mp[layer]
+
+            
+            self.get_logger().debug("MP layer %d complete", layer)
 
         self.stats["inference_time"].append(inference_time)
         self.stats["message_passing_time"].append(time.perf_counter() - mp_start)
@@ -300,7 +304,7 @@ class Node(ObjectWithLogger):
             # Wait until values are received from all neighbors.
             wait_time_start = time.time()
             while len(self.received_pooling[iteration]) < len(self.active_neighbors):
-                if time.time() - wait_time_start > 2.0:  # 2 seconds timeout
+                if time.time() - wait_time_start > 30:  # 30 seconds timeout
                     raise TimeoutError("Timeout waiting for pooling messages.")
                 time.sleep(0.1)
 
@@ -309,6 +313,8 @@ class Node(ObjectWithLogger):
                 node_value, list(self.received_pooling[iteration].values())
             )
             del self.received_pooling[iteration]
+
+            self.get_logger().debug("Pooling iteration %d complete (error=%.6f)", iteration, error)
 
         if final_value is None:
             raise RuntimeError("Pooling did not converge.")
