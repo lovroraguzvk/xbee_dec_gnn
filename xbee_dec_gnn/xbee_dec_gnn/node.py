@@ -548,9 +548,14 @@ class Node(ObjectWithLogger):
         self.stats["round_time"].append(elapsed)
         self.get_logger().info("ROUND %d DONE: value=%.4f (%.2fs)", self.round_counter, graph_value, elapsed)
 
-        led_color = LEDMatrix.from_colormap(graph_value / self.num_nodes, color_space="hsv", cmap_name="jet")
-        led_color = (led_color[0], led_color[1], led_color[2] * 0.2)  # Full brightness
-        self.led.set_all(led_color, color_space="hsv")
+        if graph_value < 0.5:
+            mids = "not "
+            color = (50, 50, 50)
+        else:
+            mids = ""
+            color = (50, 0, 0)
+        self.get_logger().info(f"The node is \033[7m{mids}in MIDS\033[0m.\n")
+        self.led.set_all(color)
 
     def print_stats(self):
         table = PrettyTable()
