@@ -570,7 +570,7 @@ class Node(ObjectWithLogger):
     def stop(self):
         self.device.close()
         self.get_logger().info("Node stopped.")
-        self.print_stats()
+        # self.print_stats()
         self.led.exit()
 
 
