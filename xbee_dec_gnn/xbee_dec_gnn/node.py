@@ -198,7 +198,7 @@ class Node(ObjectWithLogger):
     def start(self):
         self.device.open()
         self.device.add_data_received_callback(self.receive_message_xbee)
-        self.get_logger().info("XBee receive timeout: %s seconds", self.device.get_receive_timeout())
+        self.get_logger().info("XBee receive timeout: %s seconds", self.device.get_sync_ops_timeout())
 
         self.get_logger().info(f"Port: {self.port} @ {self.baud}")
         self.get_logger().info(f"XBee addr64: {self.device.get_64bit_addr()}")
