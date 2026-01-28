@@ -548,10 +548,9 @@ class Node(ObjectWithLogger):
         self.stats["round_time"].append(elapsed)
         self.get_logger().info("ROUND %d DONE: value=%.4f (%.2fs)", self.round_counter, graph_value, elapsed)
 
-        # TODO: Adapt for Xbee
-        # led_color = LEDMatrix.from_colormap(graph_value / self.num_nodes, color_space="hsv", cmap_name="jet")
-        # led_color = (led_color[0], led_color[1], led_color[2] * 0.2)  # Full brightness
-        # self.led.set_all(led_color, color_space="hsv")
+        led_color = LEDMatrix.from_colormap(graph_value / self.num_nodes, color_space="hsv", cmap_name="jet")
+        led_color = (led_color[0], led_color[1], led_color[2] * 0.2)  # Full brightness
+        self.led.set_all(led_color, color_space="hsv")
 
     def print_stats(self):
         table = PrettyTable()
