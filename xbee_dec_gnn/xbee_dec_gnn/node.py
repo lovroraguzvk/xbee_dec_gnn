@@ -65,6 +65,7 @@ class Node(ObjectWithLogger):
         self.data = None
 
         self.get_logger().info("Node online: hostname=%s", self.hostname)
+        # print getReceivedTimout
 
         self.value = torch.Tensor()  # The current representation of the node.
         self.output = torch.Tensor()  # The interpretable output of the GNN after each layer.
@@ -197,6 +198,7 @@ class Node(ObjectWithLogger):
     def start(self):
         self.device.open()
         self.device.add_data_received_callback(self.receive_message_xbee)
+        self.get_logger().info("XBee receive timeout: %s seconds", self.device.get_receive_timeout())
 
         self.get_logger().info(f"Port: {self.port} @ {self.baud}")
         self.get_logger().info(f"XBee addr64: {self.device.get_64bit_addr()}")
@@ -484,7 +486,7 @@ class Node(ObjectWithLogger):
                     else:
                         self.get_logger().debug("TX: %s -> node %s (retry %d)", "pooling", node_id, attempt)
                     break
-                except TransmitException as e:
+                except (TransmitException, TimeoutException) as e:
                     status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
                     self.get_logger().warning("TX fail: %s (attempt %d, %s)", "pooling", attempt, status)
                     time.sleep(0.1)
