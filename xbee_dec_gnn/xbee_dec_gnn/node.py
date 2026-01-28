@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Dict, Any
 from digi.xbee.devices import ZigBeeDevice
 from digi.xbee.models.address import XBee64BitAddress, XBee16BitAddress
-from digi.xbee.exception import TransmitException
+from digi.xbee.exception import TransmitException, TimeoutException
 
 import networkx as nx
 import numpy as np
@@ -410,7 +410,7 @@ class Node(ObjectWithLogger):
                     else:
                         self.get_logger().debug("TX: %s -> node %s (retry %d)", "MP at iteration " + str(layer), node_id, attempt)
                     break
-                except TransmitException as e:
+                except (TransmitException, TimeoutException) as e:
                     status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
                     self.get_logger().warning("TX fail: %s (attempt %d, %s)", "MP", attempt, status)
                     time.sleep(0.1)
