@@ -238,7 +238,6 @@ class Node(ObjectWithLogger):
             self.active_neighbors[(idx + 1) % len(self.active_neighbors)]
         ]
 
-
         if ready:
             self.get_logger().debug("Neighbors: %s", self.active_neighbors)
         return ready
@@ -393,7 +392,7 @@ class Node(ObjectWithLogger):
         data = encode_msg(msg)
 
         for neighbor in self.active_neighbors:
-            time.sleep(random.uniform(0.01, 0.06))
+            time.sleep(random.uniform(0.1, 1))
 
             node_id = neighbor
             addr = self.id_to_addr[neighbor]
