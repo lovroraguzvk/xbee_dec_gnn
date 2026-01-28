@@ -63,6 +63,7 @@ windows:
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.196 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
+          git pull
           reset && python3 -m xbee_dec_gnn.node
   - node 2:
       panes:
@@ -70,6 +71,7 @@ windows:
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.229 'docker start -i xbee_gnn_cont'
           <%- end %>
+          git pull
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
   - node 3:
@@ -78,6 +80,7 @@ windows:
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.158 'docker start -i xbee_gnn_cont'
           <%- end %>
+          git pull
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
   - node 4:
@@ -86,6 +89,7 @@ windows:
           <%- if args[0] == "remote" %>
           ssh -o StrictHostKeyChecking=no -t pi@172.16.0.222 'docker start -i xbee_gnn_cont'
           <%- end %>
+          git pull
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           reset && python3 -m xbee_dec_gnn.node
   - central:
