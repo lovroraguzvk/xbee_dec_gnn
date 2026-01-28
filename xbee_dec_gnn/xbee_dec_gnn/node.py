@@ -228,6 +228,17 @@ class Node(ObjectWithLogger):
             raise RuntimeError("Local subgraph is not connected.")
         ready = len(self.active_neighbors) > 0
 
+                
+        # neighbours are the one after and the one before in the sorted list of all ids, for testing in circular topology
+        # CIRCULAR GRAPH:
+        self.active_neighbors = sorted(self.id_to_addr.keys())
+        idx = self.active_neighbors.index(self.node_id)
+        self.active_neighbors = [
+            self.active_neighbors[(idx - 1) % len(self.active_neighbors)],
+            self.active_neighbors[(idx + 1) % len(self.active_neighbors)]
+        ]
+
+
         if ready:
             self.get_logger().debug("Neighbors: %s", self.active_neighbors)
         return ready

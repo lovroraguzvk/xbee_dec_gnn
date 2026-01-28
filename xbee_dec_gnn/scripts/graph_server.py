@@ -85,7 +85,7 @@ class GraphGenerator(ObjectWithLogger):
         gui_mode=False,
         port="/dev/ttyUSB0",
         baud_rate=9600,
-        config="config.json",
+        config="/root/other_ws/xbee_dec_gnn/xbee_dec_gnn/scripts/config.json",
         feature_dim: int | None = 8,
         graph_size: int | None = None,
     ):
@@ -626,7 +626,7 @@ if __name__ == "__main__":
     )
     args.add_argument("--port", default="/dev/ttyUSB0")
     args.add_argument("--baud", type=int, default=9600)
-    args.add_argument("--config", default="config.json")
+    args.add_argument("--config", default="/root/other_ws/xbee_dec_gnn/xbee_dec_gnn/scripts/config.json")
     args.add_argument(
         "--feature-dim",
         type=int,
