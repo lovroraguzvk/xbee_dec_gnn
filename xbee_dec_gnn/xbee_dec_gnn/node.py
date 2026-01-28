@@ -567,6 +567,12 @@ class Node(ObjectWithLogger):
             )
         self.get_logger().info("\n%s", table)
 
+    def stop(self):
+        self.device.close()
+        self.get_logger().info("Node stopped.")
+        self.print_stats()
+        self.led.exit()
+
 
 def main(args=None):
     parser = argparse.ArgumentParser()
@@ -576,7 +582,10 @@ def main(args=None):
 
     gnn_node = Node(port=cli_args.port, baud=cli_args.baud)
     gnn_node.start()
-    gnn_node.run()
+    try:
+        gnn_node.run()
+    except KeyboardInterrupt:
+        gnn_node.stop()
 
 
 if __name__ == "__main__":
