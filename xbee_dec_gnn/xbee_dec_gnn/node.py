@@ -107,17 +107,9 @@ class Node(ObjectWithLogger):
 
     def run(self):
         # Main loop of the node.
-        time.sleep(1)
         while True:
-            time.sleep(1)
+            time.sleep(0.1)
             self.compute_gnn()
-
-    # def graph_cb(self, msg):
-    #     G = nx.from_graph6_bytes(bytes(msg.data.strip(), "ascii"))
-    #     lambda2 = nx.laplacian_spectrum(G)[1]
-    #     self.get_logger().debug(f"Received graph {msg.data} with algebraic connectivity λ₂: {lambda2:.4f}")
-
-    #     self.local_subgraph: nx.Graph = G.subgraph([self.node_id] + list(G.neighbors(self.node_id)))
 
     def receive_message_xbee(self, xbee_message):
         #check if message is json or pickled
@@ -361,15 +353,6 @@ class Node(ObjectWithLogger):
         time.sleep(0.05)
 
     def send_message_passing(self, layer: int, value: torch.Tensor):
-        # msg = GNNmessage()
-        # msg.sender = self.node_name
-        # msg.iteration = layer
-        # msg.data = value.flatten().tolist()  # Flatten tensor to 1D list
-        # msg.shape = list(value.shape)  # Store original shape
-        # for neighbor in self.active_neighbors:
-        #     self.mp_pubs[neighbor].publish(msg)
-        #     self.get_logger().debug(f"Sent message to {neighbor} at layer {layer}")
-        # TODO: Adapt for Xbee
 
         blob, shape = pack_tensor(value)
         msg = {
@@ -384,7 +367,7 @@ class Node(ObjectWithLogger):
         data = encode_msg(msg)
 
         for neighbor in self.active_neighbors:
-            time.sleep(random.uniform(0.1, 1))
+            time.sleep(random.uniform(0.05, 0.2))
 
             node_id = neighbor
             addr = self.id_to_addr[neighbor]
@@ -393,6 +376,7 @@ class Node(ObjectWithLogger):
                 addr = XBee64BitAddress.from_hex_string(addr)
 
             ok = False
+            time_wait_exc = 0.05
             for attempt in range(1, 5):
                 try:
                     self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
@@ -405,23 +389,14 @@ class Node(ObjectWithLogger):
                 except (TransmitException, TimeoutException) as e:
                     status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
                     self.get_logger().warning("TX fail: %s (attempt %d, %s)", "MP", attempt, status)
-                    time.sleep(0.1)
+                    time.sleep(time_wait_exc)
+                    time_wait_exc *= 2  # Exponential backoff
 
             if not ok:
                 self.get_logger().error("TX gave up: %s to node %s", "MP", node_id)
             time.sleep(0.05)
 
-        # for neighbor in self.active_neighbors:
-        #     self.send_message_xbee(msg, self.id_to_addr[neighbor], neighbor)
-
-    def receive_message_passing(self, msg):
-        # Reconstruct tensor from flattened data and shape
-        # tensor_data = torch.tensor(msg.data).reshape(tuple(msg.shape))
-        # self.received_mp[msg.iteration][msg.sender] = tensor_data
-        # TODO: Adapt for Xbee
-
-        # tensor_data = torch.tensor(msg.get("data")).reshape(tuple(msg.get("shape")))
-        
+    def receive_message_passing(self, msg):        
         r = msg["r"]
         layer = msg["i"]
         sender = msg["id"]
@@ -435,25 +410,6 @@ class Node(ObjectWithLogger):
         )
 
     def send_pooling(self, iteration: int, value: dict[str, torch.Tensor] | torch.Tensor):
-        # msg = GNNmessage()
-        # msg.sender = self.node_name
-        # msg.iteration = iteration
-
-        # if isinstance(value, dict):  # This enables pooling by flooding
-        #     msg.sources = list(value.keys())
-        #     data = torch.stack(list(value.values()), dim=0)
-        #     msg.data = data.flatten().tolist()  # Flatten tensor to 1D list
-        #     msg.shape = list(data.shape)  # Store original shape
-        # else:
-        #     msg.data = value.flatten().tolist()  # Flatten tensor to 1D list
-        #     msg.shape = list(value.shape)  # Store original shape
-
-        # for neighbor in self.active_neighbors:
-        #     self.pooling_pubs[neighbor].publish(msg)
-        #     self.get_logger().debug(f"Sent pooling message to {neighbor} at iteration {iteration}")
-        # TODO: Adapt for Xbee
-
-
         msg = {
             "t": "pooling",
             "id" : self.node_id,
@@ -496,17 +452,6 @@ class Node(ObjectWithLogger):
             time.sleep(0.05)
 
     def receive_pooling(self, msg):
-        # self.get_logger().debug(f"Received pooling message from {msg.sender} at iteration {msg.iteration}")
-        # if len(msg.sources) > 0:
-        #     # Reconstruct dict of tensors from flattened data and shape
-        #     data = torch.tensor(msg.data).reshape(tuple(msg.shape))
-        #     tensor_data = {source: data[i] for i, source in enumerate(msg.sources)}
-        # else:
-        #     # Reconstruct tensor from flattened data and shape
-        #     tensor_data = torch.tensor(msg.data).reshape(tuple(msg.shape))
-        # self.received_pooling[msg.iteration][msg.sender] = tensor_data
-        # TODO: Adapt for Xbee
-
         sources = msg.get("ss", [])
         if len(sources) > 0:
             # Reconstruct dict of tensors from flattened data and shape

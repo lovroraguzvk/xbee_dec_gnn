@@ -247,6 +247,7 @@ class GraphGenerator(ObjectWithLogger):
         if isinstance(addr, str):
             addr = XBee64BitAddress.from_hex_string(addr)
 
+        time_wait_exc = 0.05
         for attempt in range(1, 5): # TODO: make retries variable
             try:
                 self.device.send_data_64_16(addr, XBee16BitAddress.UNKNOWN_ADDRESS, data)
@@ -256,7 +257,8 @@ class GraphGenerator(ObjectWithLogger):
             except (TransmitException, TimeoutException) as e:
                 status = getattr(e, "transmit_status", None) or getattr(e, "status", None)
                 self.get_logger().warning("TX: fail -> %s (attempt=%d status=%s)", node_id, attempt, status)
-                time.sleep(0.1)
+                time.sleep(time_wait_exc)
+                time_wait_exc *= 2  # Exponential backoff
 
         if not ok:
             self.get_logger().error("TX: giving up delivering %s to %s (addr=%s)", msg.get("type") or msg.get("t"), node_id, addr)
