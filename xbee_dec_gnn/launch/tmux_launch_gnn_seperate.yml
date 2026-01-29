@@ -52,7 +52,7 @@ windows:
       panes:
         - |
           <%- if args[0] == "mixed" or args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@172.16.0.198 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi0.local 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           git pull
@@ -61,7 +61,7 @@ windows:
       panes:
         - |
           <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@172.16.0.196 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi1.local 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           git pull
@@ -70,7 +70,7 @@ windows:
       panes:
         - |
           <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@172.16.0.229 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi2.local 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           git pull
@@ -79,7 +79,7 @@ windows:
       panes:
         - |
           <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@172.16.0.158 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi3.local 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           git pull
@@ -88,7 +88,7 @@ windows:
       panes:
         - |
           <%- if args[0] == "remote" %>
-          ssh -o StrictHostKeyChecking=no -t pi@172.16.0.222 'docker start -i xbee_gnn_cont'
+          ssh -o StrictHostKeyChecking=no -t pi@rpi4.local 'docker start -i xbee_gnn_cont'
           <%- end %>
           cd ~/other_ws/xbee_dec_gnn/xbee_dec_gnn
           git pull
